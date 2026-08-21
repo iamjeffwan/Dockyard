@@ -184,3 +184,47 @@ Dockyard 自己实现桌面窗口、共享画布、设计记录和组件图层�
 - 桌面覆盖类项目主要参考窗口透明、穿透和快捷键，不直接复用其屏幕坐标模型。
 - 画布库主要提供图形对象、选择、拖拽、缩放和导出能力；标注数据格式、组件图层和 `MCP`（模型上下文协议）工具由 Dockyard 自己定义。
 - 候选组件的检索可以由模型访问指定的官方文档和示例网站完成；是否使用脚本强制域名限制属于后续可靠性增强，不是第一版的前置条件。
+
+## 11. 本轮官方资料核查（2026-08-21）
+
+本节只记录官方文档或项目源代码中可以直接验证的能力，作为新版产品形态和开发计划的依据。
+
+### 11.1 `Excalidraw`（手绘画布）嵌入与场景文件
+
+- `@excalidraw/excalidraw`（Excalidraw 的 React 组件包）可以直接作为 React 组件嵌入；官方示例要求引入组件样式，并给父容器明确高度，否则画布不可见。[官方集成文档](https://docs.excalidraw.com/docs/%40excalidraw/excalidraw/integration)
+- `initialData`（初始场景）可用于打开已有场景；`onChange`（变更回调）会返回元素数组、应用状态和图片文件数据，适合在 Dockyard 主进程保存场景快照；`onPaste`（粘贴回调）和 `onLibraryChange`（图形库变更回调）可接入图片导入和全局组件库。[官方属性文档](https://docs.excalidraw.com/docs/%40excalidraw/excalidraw/api/props/)
+- Excalidraw 元素允许使用可选的 `customData`（自定义数据）对象。Dockyard 可以在不修改 Excalidraw 元素基础结构的情况下记录 `layer`（图层类型）、`artworkId`（图稿编号）、`componentId`（组件编号）和来源信息。[官方属性文档的自定义数据章节](https://docs.excalidraw.com/docs/%40excalidraw/excalidraw/api/props/#storing-custom-data-on-excalidraw-elements)
+- 官方 JSON 格式包含 `type`、`version`、`source`、`elements`、`appState` 和 `files`；其中 `elements` 是场景对象，`appState` 是画布状态，`files` 保存图片元素数据。[官方 JSON Schema](https://github.com/excalidraw/excalidraw/blob/master/dev-docs/docs/codebase/json-schema.mdx)
+- 官方项目 README 列出矩形、圆形、菱形、箭头、直线、自由画笔、橡皮、撤销/重做、缩放/平移、图片、PNG/SVG/剪贴板导出等能力，并说明编辑器以 MIT（开源许可证）发布。[官方仓库 README](https://github.com/excalidraw/excalidraw)
+
+由此确定：每张图稿保存一份 `scene.excalidraw.json`（Excalidraw 场景文件），其内容负责可编辑画布；`design.json`（Dockyard 设计记录）负责图稿、原图、标注、组件实例、组件来源、目标项目和导出文件的索引。原图锁定、候选预览不可拆解、组件草图确认后删除，属于 Dockyard 的产品策略，不能依赖 Excalidraw JSON 自动提供。
+
+### 11.2 `Codex`（编码助手）、`Codex CLI`（命令行编码助手）与桌面交接
+
+- 官方帮助中心将 Codex CLI 定义为本地运行的编码代理，可以读取、修改和运行本机代码；同时支持文字、截图和图表等多模态输入。[Codex CLI 入门](https://help.openai.com/en/articles/11096431)
+- 官方 Codex SDK（软件开发工具包）类型定义包含 `LocalImageInput`（本地图片路径输入）、`ImageInput`（图片数据地址输入）、`workingDirectory`（工作目录）和附加目录参数，证明“把当前图稿图片和上下文包放在代码项目目录，再让 Codex 读取”是可行的集成方向。[官方 Python SDK 输入类型](https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md)、[官方 TypeScript 执行参数](https://github.com/openai/codex/blob/main/sdk/typescript/src/exec.ts)
+- 新版 ChatGPT 桌面端把 Chat、Work 和 Codex 作为不同入口；官方说明 Codex 可以使用本地文件、代码仓库、终端和开发工具，Work 则在用户授权后读取本地文件夹或项目。[桌面端说明](https://help.openai.com/en/articles/20001276/)、[ChatGPT Work 与 Codex](https://help.openai.com/en/articles/20001275/)
+- 官方文档没有提供“Dockyard 把附件和提示词注入任意已有 ChatGPT/Codex 对话输入框”的公共桌面接口。因此第一版采用显式交接：用户为当前图稿选择目标代码项目，Dockyard 写入上下文包、复制可编辑提示词并打开项目目录；用户在 Codex 中自行读取该目录。这个交接方式也不要求控制或读取 ChatGPT 窗口。[ChatGPT Windows 文件上传与 Companion Window](https://help.openai.com/en/articles/9982051-using-the-chatgpt-windows-app)
+
+### 11.3 `Electron`（桌面框架）窗口、进程通信和本地存储
+
+- `BrowserWindow`（浏览器窗口）支持无边框 `frame: false`、透明 `transparent: true`、置顶 `setAlwaysOnTop`、位置读取/设置 `getPosition`/`setPosition`；官方说明 Windows 上透明窗口需要同时使用无边框模式。[BrowserWindow API](https://www.electronjs.org/docs/latest/api/browser-window)
+- 无边框窗口的可拖动区域由 CSS 的 `-webkit-app-region: drag` 定义，按钮等交互区域应标记为 `no-drag`。[窗口自定义教程](https://www.electronjs.org/docs/latest/tutorial/window-customization)
+- 渲染进程之间没有直接 IPC（进程间通信）通道，应让主进程作为消息中介；启用 `contextIsolation`（上下文隔离）并通过 `contextBridge`（上下文桥）暴露最小化的安全 API，不应把完整 `ipcRenderer` 对象暴露给页面。[IPC 教程](https://www.electronjs.org/docs/latest/tutorial/ipc)、[contextBridge API](https://www.electronjs.org/docs/latest/api/context-bridge)
+- 应用数据应放在 `app.getPath('userData')`（应用数据目录）的专用子目录；官方不建议直接把大文件写到 `userData` 根目录。目录选择可以使用原生 `dialog.showOpenDialog`（打开对话框）的 `openDirectory` 属性。[app API](https://www.electronjs.org/docs/latest/api/app)、[dialog API](https://www.electronjs.org/docs/latest/api/dialog)
+
+由此确定：工具条窗口和中央工作页窗口由主进程分别管理，位置和置顶状态单独保存；窗口间设计状态通过主进程转发，不在渲染进程之间直接共享 Node/Electron 能力。
+
+### 11.4 `MCP`（模型上下文协议）的定位
+
+- MCP 采用 Host（宿主）—Client（客户端）—Server（服务器）架构；服务器可以提供 Resources（资源）、Prompts（提示模板）和 Tools（工具）。[官方架构规范](https://modelcontextprotocol.io/specification/2025-06-18/architecture)
+- Resources 由应用控制如何附加到模型上下文，支持文本和二进制内容；规范明确允许界面让用户显式选择资源，不要求模型自动读取全部数据。[官方 Resources 规范](https://modelcontextprotocol.io/specification/2025-03-26/server/resources)
+- 因此 MCP 不替代“生成上下文包并交给 Codex CLI”的第一版主流程。Dockyard 后续可以提供按图稿编号读取 `design.json`、场景文件、原图和预览图的 Resources，以及需要用户确认的更新 Tools；是否被当前模型使用由宿主应用决定。
+
+## 12. 对第一版开发计划的直接约束
+
+1. 画布引擎改为嵌入 `Excalidraw`，保留其原生工具栏；Dockyard 只增加图稿切换、组件草图检索、候选拖入、发送开发上下文等外层操作。
+2. “组件草图”是临时查询输入：检索失败时仅在当前页面保留，关闭检索面板即丢弃；候选被拖入画布后删除对应草图。临时草图不能污染长期保存的 `scene.excalidraw.json`。
+3. 候选组件以独立图片元素叠加到当前场景中央，允许移动、缩放和删除；`customData` 记录候选编号、来源、版本和“真实预览/参考图”标记，不拆解成可编辑组件结构。
+4. “发送给开发助手”只针对当前图稿：原图、带标注预览、当前场景、`design.json` 图稿片段、已确认组件来源和可编辑提示词写入用户选择的目标代码项目隐藏目录，并保留历史版本与最新版本。
+5. 第一版不自动注入 ChatGPT/Codex 对话、不依赖 MCP；MCP 服务作为后续显式读取/更新入口实现。
