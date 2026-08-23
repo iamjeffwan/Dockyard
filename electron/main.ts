@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { basename, dirname, extname, join } from 'node:path';
 
 const execFileAsync = promisify(execFile);
-type View = 'annotator' | 'component-search';
+type View = 'annotator' | 'component-search' | 'tokens' | 'decisions';
 const now = () => new Date().toISOString();
 const uid = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const defaultDataRoot = app.isPackaged ? (process.env.LOCALAPPDATA || app.getPath('appData')) : process.cwd();
@@ -161,12 +161,13 @@ function broadcast() { for (const win of [barWindow, ...panelWindows.values()]) 
 function createBarWindow() {
   const workArea = screen.getPrimaryDisplay().workArea;
   const saved = workspace?.windowState?.bar;
-  barWindow = new BrowserWindow({ width: 380, height: 86, x: saved?.x ?? workArea.x + workArea.width - 405, y: saved?.y ?? workArea.y + workArea.height - 115, frame: false, transparent: true, resizable: false, movable: true, alwaysOnTop: true, skipTaskbar: true, show: false, webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false } });
+  const barX = Math.min(saved?.x ?? workArea.x + workArea.width - 685, workArea.x + workArea.width - 685);
+  barWindow = new BrowserWindow({ width: 660, height: 86, x: barX, y: saved?.y ?? workArea.y + workArea.height - 115, frame: false, transparent: true, resizable: false, movable: true, alwaysOnTop: true, skipTaskbar: true, show: false, webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false } });
   barWindow.setAlwaysOnTop(true, 'floating'); loadView(barWindow, 'bar'); barWindow.once('ready-to-show', () => barWindow?.show()); barWindow.on('moved', () => { if (workspace && barWindow) { const [x, y] = barWindow.getPosition(); workspace.windowState = { ...workspace.windowState, bar: { x, y } }; } }); barWindow.on('closed', () => { barWindow = null; });
 }
 function openPanel(view: View) {
   const existing = panelWindows.get(view); if (existing && !existing.isDestroyed()) { existing.show(); existing.focus(); return; }
-  const panel = new BrowserWindow({ width: view === 'annotator' ? 1180 : 620, height: view === 'annotator' ? 780 : 780, minWidth: view === 'annotator' ? 900 : 520, minHeight: 620, frame: false, backgroundColor: '#0b0e0f', resizable: true, alwaysOnTop: true, webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false } });
+  const panel = new BrowserWindow({ width: view === 'annotator' ? 1180 : view === 'component-search' ? 620 : 600, height: view === 'annotator' ? 780 : view === 'component-search' ? 780 : 680, minWidth: view === 'annotator' ? 900 : view === 'component-search' ? 520 : 560, minHeight: 620, frame: false, backgroundColor: '#0b0e0f', resizable: true, alwaysOnTop: true, webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false } });
   panel.setAlwaysOnTop(true, 'floating'); panelWindows.set(view, panel); loadView(panel, view); panel.once('ready-to-show', () => { panel.show(); broadcast(); }); panel.on('closed', () => panelWindows.delete(view));
 }
 function validateCandidates(raw: any) { const list = Array.isArray(raw) ? raw : raw?.candidates; if (!Array.isArray(list)) throw new Error('返回格式不是候选列表'); return list.filter(item => item && item.name && item.library && item.docsUrl && item.codeUrl && item.previewKind && ['official', 'rendered', 'reference'].includes(item.previewKind)).slice(0, 5); }

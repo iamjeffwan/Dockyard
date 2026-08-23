@@ -9,8 +9,8 @@ contextBridge.exposeInMainWorld('dockyard', {
   openContext: (path: string) => ipcRenderer.invoke('context:open', path),
   syncDesign: (workspace: unknown) => ipcRenderer.send('design:sync', workspace),
   mcpPort: () => ipcRenderer.invoke('mcp:port'),
-  openPanel: (view: 'annotator' | 'component-search') => ipcRenderer.invoke('panel:open', view),
-  closePanel: (view: 'annotator' | 'component-search') => ipcRenderer.invoke('panel:close', view),
+  openPanel: (view: 'annotator' | 'component-search' | 'tokens' | 'decisions') => ipcRenderer.invoke('panel:open', view),
+  closePanel: (view: 'annotator' | 'component-search' | 'tokens' | 'decisions') => ipcRenderer.invoke('panel:close', view),
   showBar: () => ipcRenderer.invoke('bar:show'),
   hideBar: () => ipcRenderer.invoke('bar:hide'),
   onDesignState: (listener: (workspace: unknown) => void) => {

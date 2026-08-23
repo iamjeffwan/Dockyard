@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1320" viewBox="0 0 1800 1320">
+  <style>
+    .page { fill:#f7f7f5; }
+    .frame { fill:#fff; stroke:#222; stroke-width:2; }
+    .panel { fill:#f0f0ed; stroke:#444; stroke-width:1.5; }
+    .dark { fill:#333; }
+    .line { fill:none; stroke:#444; stroke-width:2; }
+    .thin { fill:none; stroke:#999; stroke-width:1.5; }
+    .title { font:700 20px Arial,sans-serif; fill:#111; }
+    .label { font:600 14px Arial,sans-serif; fill:#222; }
+    .small { font:12px Arial,sans-serif; fill:#555; }
+    .tiny { font:11px Arial,sans-serif; fill:#666; }
+    .white { fill:#fff; }
+    .center { text-anchor:middle; }
+  </style>
+
+  <rect class="page" width="1800" height="1320"/>
+  <text x="44" y="42" class="title">Dockyard 日常工作条 + 工作区功能线稿</text>
+  <text x="44" y="68" class="small">常驻入口保持轻量；项目 Token 和设计决策按需打开，不做复杂管理后台。</text>
+
+  <!-- 1 daily bar -->
+  <g transform="translate(44 104)">
+    <text x="0" y="0" class="title">1 / 右下角常驻工作条</text>
+    <text x="0" y="24" class="small">用户每天首先看到的形态</text>
+    <rect class="frame" x="0" y="48" width="760" height="300"/>
+    <text x="22" y="76" class="small">桌面</text>
+    <rect class="panel" x="22" y="92" width="716" height="180"/>
+    <rect class="frame" x="350" y="126" width="360" height="76"/>
+    <text x="370" y="153" class="label">D  DOCKYARD</text>
+    <text x="370" y="178" class="tiny">项目：Dockyard</text>
+    <rect class="frame" x="496" y="138" width="92" height="38"/>
+    <text x="542" y="162" class="tiny center">工作区：UI</text>
+    <rect class="dark" x="598" y="138" width="92" height="38"/>
+    <text x="644" y="162" class="tiny white center">选择</text>
+    <line class="thin" x1="370" y1="218" x2="690" y2="218"/>
+    <rect class="dark" x="370" y="232" width="70" height="28"/>
+    <text x="405" y="250" class="tiny white center">图稿</text>
+    <rect class="frame" x="448" y="232" width="70" height="28"/>
+    <text x="483" y="250" class="tiny center">组件</text>
+    <rect class="frame" x="526" y="232" width="70" height="28"/>
+    <text x="561" y="250" class="tiny center">Token</text>
+    <rect class="frame" x="604" y="232" width="70" height="28"/>
+    <text x="639" y="250" class="tiny center">决策</text>
+    <text x="22" y="322" class="tiny">默认只显示项目、工作区和四个入口；不显示历史任务列表。</text>
+  </g>
+
+  <!-- 2 project/workspace picker -->
+  <g transform="translate(844 104)">
+    <text x="0" y="0" class="title">2 / 选择项目和工作区</text>
+    <text x="0" y="24" class="small">点击工作条上的项目或工作区后展开</text>
+    <rect class="frame" x="0" y="48" width="760" height="300"/>
+    <rect class="dark" x="38" y="82" width="684" height="64"/>
+    <text x="60" y="110" class="small white">当前项目：Dockyard</text>
+    <text x="60" y="132" class="tiny white">当前工作区：UI</text>
+    <rect class="frame" x="38" y="164" width="328" height="142"/>
+    <text x="58" y="192" class="label">项目</text>
+    <rect class="panel" x="58" y="208" width="288" height="30"/>
+    <text x="72" y="228" class="small">Dockyard</text>
+    <rect class="frame" x="58" y="246" width="288" height="30"/>
+    <text x="72" y="266" class="small">GameViewer</text>
+    <rect class="frame" x="388" y="164" width="334" height="142"/>
+    <text x="408" y="192" class="label">工作区</text>
+    <rect class="dark" x="408" y="208" width="294" height="30"/>
+    <text x="555" y="228" class="tiny white center">UI</text>
+    <rect class="frame" x="408" y="246" width="294" height="30"/>
+    <text x="555" y="266" class="tiny center">图稿研究</text>
+    <text x="38" y="332" class="tiny">项目 = 代码仓库；工作区 = 这个项目里的设计资料和图稿集合。</text>
+  </g>
+
+  <!-- 3 artwork/component panel -->
+  <g transform="translate(44 500)">
+    <text x="0" y="0" class="title">3 / 图稿和组件</text>
+    <text x="0" y="24" class="small">现有 Dockyard 功能继续保留，所有操作都针对当前工作区</text>
+    <rect class="frame" x="0" y="48" width="760" height="370"/>
+    <rect class="panel" x="0" y="48" width="132" height="370"/>
+    <text x="22" y="80" class="label">当前工作区</text>
+    <rect class="dark" x="14" y="100" width="104" height="34"/>
+    <text x="66" y="122" class="tiny white center">图稿</text>
+    <rect class="frame" x="14" y="144" width="104" height="34"/>
+    <text x="66" y="166" class="tiny center">组件</text>
+    <line class="thin" x1="20" y1="206" x2="112" y2="206"/>
+    <text x="22" y="236" class="tiny">当前图稿</text>
+    <text x="22" y="264" class="tiny">组件检索页</text>
+    <text x="22" y="290" class="tiny">图稿编辑器</text>
+    <rect class="line" x="154" y="72" width="584" height="276"/>
+    <text x="176" y="104" class="label">组件检索页</text>
+    <rect class="panel" x="176" y="124" width="540" height="160"/>
+    <rect class="frame" x="202" y="150" width="218" height="108"/>
+    <rect class="frame" x="442" y="150" width="82" height="108"/>
+    <rect class="frame" x="546" y="150" width="144" height="32"/>
+    <rect class="dark" x="546" y="194" width="144" height="32"/>
+    <text x="446" y="316" class="tiny center">画板 / 标注 / 组件图层</text>
+    <rect class="frame" x="176" y="310" width="170" height="34"/>
+    <text x="261" y="332" class="tiny center">打开组件检索</text>
+    <rect class="frame" x="360" y="310" width="170" height="34"/>
+    <text x="445" y="332" class="tiny center">保存图稿</text>
+    <rect class="dark" x="544" y="310" width="172" height="34"/>
+    <text x="630" y="332" class="tiny white center">发送给 Codex</text>
+  </g>
+
+  <!-- 4 token panel -->
+  <g transform="translate(844 500)">
+    <text x="0" y="0" class="title">4 / Token 面板</text>
+    <text x="0" y="24" class="small">点击工作条的 Token，只看当前项目实际使用的值</text>
+    <rect class="frame" x="0" y="48" width="760" height="370"/>
+    <rect class="panel" x="0" y="48" width="142" height="370"/>
+    <text x="22" y="80" class="label">Token</text>
+    <rect class="dark" x="14" y="98" width="114" height="32"/>
+    <text x="71" y="119" class="tiny white center">color</text>
+    <rect class="frame" x="14" y="138" width="114" height="32"/>
+    <text x="71" y="159" class="tiny center">typography</text>
+    <rect class="frame" x="14" y="178" width="114" height="32"/>
+    <text x="71" y="199" class="tiny center">spacing</text>
+    <rect class="frame" x="14" y="218" width="114" height="32"/>
+    <text x="71" y="239" class="tiny center">motion</text>
+    <rect class="line" x="164" y="72" width="572" height="178"/>
+    <text x="186" y="104" class="label">color / 当前项目值</text>
+    <text x="186" y="132" class="tiny">Token</text>
+    <text x="510" y="132" class="tiny">值</text>
+    <text x="650" y="132" class="tiny">使用</text>
+    <line class="thin" x1="186" y1="144" x2="714" y2="144"/>
+    <text x="186" y="174" class="tiny">canvas.background</text>
+    <text x="510" y="174" class="tiny">#101516</text>
+    <text x="650" y="174" class="tiny">5</text>
+    <line class="thin" x1="186" y1="188" x2="714" y2="188"/>
+    <text x="186" y="218" class="tiny">button.primary</text>
+    <text x="510" y="218" class="tiny">#63f4e2</text>
+    <text x="650" y="218" class="tiny">3</text>
+    <rect class="panel" x="164" y="270" width="572" height="98"/>
+    <text x="186" y="300" class="label">选中 Token 的预览</text>
+    <rect class="frame" x="186" y="318" width="132" height="28"/>
+    <rect class="dark" x="342" y="318" width="132" height="28"/>
+    <text x="512" y="337" class="tiny">影响：SearchButton / ContextButton</text>
+  </g>
+
+  <!-- 5 decision panel -->
+  <g transform="translate(44 966)">
+    <text x="0" y="0" class="title">5 / 决策面板</text>
+    <text x="0" y="24" class="small">只保留已确认的 Token 变化，不复制 Codex 的 HTML 审查页</text>
+    <rect class="frame" x="0" y="48" width="760" height="230"/>
+    <rect class="panel" x="0" y="48" width="180" height="230"/>
+    <text x="22" y="82" class="label">已确认决策</text>
+    <rect class="dark" x="14" y="102" width="152" height="42"/>
+    <text x="90" y="128" class="tiny white center">主按钮颜色</text>
+    <rect class="frame" x="14" y="154" width="152" height="42"/>
+    <text x="90" y="180" class="tiny center">卡片间距</text>
+    <rect class="line" x="202" y="72" width="534" height="170"/>
+    <text x="224" y="104" class="label">主按钮颜色</text>
+    <text x="224" y="132" class="tiny">Token：color.button.primary</text>
+    <text x="224" y="156" class="tiny">#63f4e2  →  #8ab4ff</text>
+    <text x="224" y="180" class="tiny">影响：SearchButton、ContextButton</text>
+    <text x="224" y="204" class="tiny">原因：降低亮度，但保留操作强调</text>
+    <text x="224" y="228" class="tiny">状态：已保存到项目文件</text>
+  </g>
+
+  <!-- flow -->
+  <g transform="translate(844 966)">
+    <text x="0" y="0" class="title">6 / 用户流程</text>
+    <text x="0" y="24" class="small">从工作条开始，所有内容都围绕当前项目和工作区</text>
+    <rect class="frame" x="0" y="48" width="760" height="230"/>
+    <g transform="translate(24 96)">
+      <rect class="dark" x="0" y="0" width="112" height="52"/>
+      <text x="56" y="22" class="tiny white center">选择项目</text>
+      <text x="56" y="40" class="tiny white center">和工作区</text>
+      <line class="line" x1="112" y1="26" x2="148" y2="26"/>
+      <polygon points="148,26 138,20 138,32" fill="#444"/>
+      <rect class="frame" x="148" y="0" width="112" height="52"/>
+      <text x="204" y="22" class="tiny center">选择入口</text>
+      <text x="204" y="40" class="tiny center">图稿 / 组件 / Token</text>
+      <line class="line" x1="260" y1="26" x2="296" y2="26"/>
+      <polygon points="296,26 286,20 286,32" fill="#444"/>
+      <rect class="frame" x="296" y="0" width="112" height="52"/>
+      <text x="352" y="22" class="tiny center">查看或修改</text>
+      <text x="352" y="40" class="tiny center">当前项目内容</text>
+      <line class="line" x1="408" y1="26" x2="444" y2="26"/>
+      <polygon points="444,26 434,20 434,32" fill="#444"/>
+      <rect class="frame" x="444" y="0" width="112" height="52"/>
+      <text x="500" y="22" class="tiny center">保存确认</text>
+      <text x="500" y="40" class="tiny center">写回项目文件</text>
+      <text x="0" y="94" class="small">Codex 直接读取项目中的 DESIGN.md、Token 和代码；Dockyard 不重复制作上下文包。</text>
+      <text x="0" y="120" class="small">不同设备通过项目仓库同步，Dockyard 本地只保留窗口状态和临时缓存。</text>
+    </g>
+  </g>
+</svg>
