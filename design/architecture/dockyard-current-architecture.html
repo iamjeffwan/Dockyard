@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dockyard 架构图</title>
+  <style>
+    :root{--ink:#17202b;--muted:#637082;--line:#cbd3dd;--paper:#fff;--canvas:#f4f6f8;--blue:#2677c9;--blue-bg:#e9f3ff;--violet:#7146b8;--violet-bg:#f2ebff;--green:#15765d;--green-bg:#e6f6ef;--amber:#a65f11;--amber-bg:#fff2dd}
+    *{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font:14px/1.5 Inter,"Microsoft YaHei",sans-serif}main{max-width:1120px;margin:auto;padding:44px 24px 64px}h1{font-size:30px;letter-spacing:-.04em;margin:0 0 5px}p{margin:0;color:var(--muted)}.intro{margin-bottom:30px}.key{display:flex;gap:18px;flex-wrap:wrap;margin:17px 0 24px;color:var(--muted);font-size:12px}.key b{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}.diagram{position:relative;display:grid;gap:13px}.layer{position:relative;display:grid;grid-template-columns:142px 1fr;gap:18px;align-items:stretch}.layer-title{border-top:1px solid var(--line);padding-top:12px;font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.08em}.content{border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:16px;display:flex;gap:12px;align-items:stretch;min-width:0}.box{border:1px solid var(--line);border-radius:9px;padding:12px 14px;flex:1;min-width:0;background:#fff}.box strong{display:block;font-size:14px;margin-bottom:2px}.box span{display:block;font-size:12px;color:var(--muted)}.box.blue{border-color:#9fc8f1;background:var(--blue-bg)}.box.violet{border-color:#cbb5ed;background:var(--violet-bg)}.box.green{border-color:#9bd7c2;background:var(--green-bg)}.box.amber{border-color:#f1c895;background:var(--amber-bg)}.join{align-self:center;color:#8794a4;font-size:20px}.down{height:17px;margin-left:210px;border-left:1px solid #9eabb9;width:1px;position:relative}.down:after{content:"";position:absolute;left:-4px;bottom:-1px;width:7px;height:7px;border-right:1px solid #9eabb9;border-bottom:1px solid #9eabb9;transform:rotate(45deg)}.side-note{margin:28px 0 0 160px;border-left:3px solid var(--violet);padding:10px 14px;background:#fbfaff;color:#4d3b6b;font-size:13px}.caption{margin-top:26px;font-size:12px;color:var(--muted)}code{font-family:ui-monospace,Consolas,monospace;font-size:12px}@media(max-width:700px){main{padding:28px 14px}.layer{grid-template-columns:1fr;gap:7px}.layer-title{border:0;padding:0}.content{flex-direction:column}.join{display:none}.down{margin-left:50%;height:11px}.side-note{margin-left:0}}
+  
+    h2{font-size:19px;margin:40px 0 4px}.state-flow{display:grid;grid-template-columns:1fr 32px 1fr 32px 1fr 32px 1fr;align-items:stretch;margin-top:18px}.state{border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:14px}.state b{display:block;font-size:12px;margin-bottom:5px}.state p{font-size:12px}.state-arrow{display:grid;place-items:center;color:#8794a4;font-size:22px}.write{display:block;margin-top:9px;padding-top:8px;border-top:1px solid #e1e6ec;color:#516072;font:11px ui-monospace,Consolas,monospace}.branch{margin-top:12px;display:grid;grid-template-columns:1fr 32px 1fr;align-items:center;width:calc(50% - 16px);margin-left:auto}.branch .state{padding:10px}.branch .state p{font-size:11px}.state.red{border-color:#efb5bc;background:#fff0f2}.state.violet{border-color:#cbb5ed;background:var(--violet-bg)}@media(max-width:700px){.state-flow,.branch{grid-template-columns:1fr;gap:7px;width:auto;margin-left:0}.state-arrow{transform:rotate(90deg);height:22px}}
+</style>
+</head>
+<body><main>
+  <h1>Dockyard 内部架构</h1>
+  <p class="intro">从上到下是调用方向；每一层只与相邻层交互。</p>
+  <div class="key"><span><b style="background:var(--blue)"></b>应用界面</span><span><b style="background:var(--violet)"></b>桌面协调</span><span><b style="background:var(--green)"></b>本地服务</span><span><b style="background:var(--amber)"></b>持久化资料</span></div>
+  <section class="diagram">
+    <div class="layer"><div class="layer-title">01 · 界面层</div><div class="content"><div class="box blue"><strong>工作条</strong><span>Dockyard 的入口与窗口切换</span></div><div class="join">＋</div><div class="box blue"><strong>图稿 · 检索 · Token · 决策</strong><span>React 视图：显示数据，接收操作</span></div></div></div>
+    <div class="down"></div>
+    <div class="layer"><div class="layer-title">02 · 应用桥接层</div><div class="content"><div class="box violet"><strong><code>preload</code>（安全桥接）</strong><span>将允许的 <code>window.dockyard</code>（前端桥接对象）能力交给界面层</span></div></div></div>
+    <div class="down"></div>
+    <div class="layer"><div class="layer-title">03 · 桌面协调层</div><div class="content"><div class="box violet"><strong><code>Electron main</code>（主进程）</strong><span>窗口管理 · 文件保存 · 组件检索 · 生成开发上下文</span></div><div class="join">→</div><div class="box green"><strong>临时 MCP 服务</strong><span>设计状态 · 预览 · 已确认组件 · 设计备注</span></div></div></div>
+    <div class="down"></div>
+    <div class="layer"><div class="layer-title">04 · 设计服务层</div><div class="content"><div class="box green"><strong>评审桥接</strong><span>接收评审 HTML 的逐项决定</span></div><div class="join">→</div><div class="box green"><strong>Dockyard MCP</strong><span>读取设计上下文 · 校验评审 · 写入决定记录</span></div><div class="join">→</div><div class="box green"><strong><code>codex</code>（命令行代理）</strong><span>仅用于组件候选检索</span></div></div></div>
+    <div class="down"></div>
+    <div class="layer"><div class="layer-title">05 · 数据层</div><div class="content"><div class="box amber"><strong><code>design/</code>（设计资料）</strong><span>规则 · Token · 评审 · 决定 · 范围化记忆</span></div><div class="join">＋</div><div class="box amber"><strong><code>.dockyard/context/</code>（项目上下文包）</strong><span>输出至用户选定的开发项目</span></div></div></div>
+  </section>
+
+  <h2>设计状态如何流转</h2>
+  <p>上面是模块分层；下面只说明一项设计建议从产生到确认的状态变化。</p>
+  <section class="state-flow">
+    <div class="state"><b>① 候选</b><p>组件检索或设计分析产生候选项；还没有改变项目设计。</p><span class="write">仅在界面内</span></div><div class="state-arrow">→</div>
+    <div class="state"><b>② 待评审</b><p>生成评审 HTML，包含建议、证据和关联 Token。</p><span class="write">design/reviews/</span></div><div class="state-arrow">→</div>
+    <div class="state"><b>③ 用户决定</b><p>逐项选择“接受、拒绝或讨论”，可以留下评论。</p><span class="write">design/decisions/</span></div><div class="state-arrow">→</div>
+    <div class="state"><b>④ 已确认</b><p>只有“接受”会成为项目设计基线，供后续上下文读取。</p><span class="write">Token / context-memory</span></div>
+  </section>
+  <section class="branch"><div class="state red"><b>拒绝 / 讨论</b><p>保留决定和评论；不更新 Token。讨论后的新信息会写入范围化记忆，避免在相同条件下重复询问。</p></div><div class="state-arrow">↗</div><div class="state violet"><b>下一轮上下文</b><p>MCP 只读取与当前界面、组件和条件相匹配的已确认结论或讨论记录。</p></div></section>
+  <aside class="side-note"><strong>长期记忆的边界：</strong>范围化记忆属于数据层，由 MCP 按“界面 / 组件 / 条件”筛选后进入下一轮上下文；它不会作为全局规则直接影响所有页面。</aside>
+  <p class="caption">评审路径：评审 HTML → 本机评审桥接 → Dockyard MCP → <code>design/decisions/</code>（逐项决定记录）。只有接受的关联项才会更新 Token。</p>
+</main></body></html>
