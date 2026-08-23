@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prompt Memory Normalizer"
+  short_description: "审计范围化偏好、事实与评审结论"
+  default_prompt: "Use $prompt-memory-normalizer to audit this long-lived context without rewriting it."

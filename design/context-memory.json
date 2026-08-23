@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0",
+  "project": "dockyard",
+  "entries": [
+    {
+      "id": "review-resolution.component-search.artwork-dependency",
+      "category": "review-resolution",
+      "status": "active",
+      "statement": "独立组件检索不依赖当前图稿；只有将候选加入当前图稿时才需要图稿。",
+      "scope": {
+        "surfaces": ["component-search"],
+        "components": ["component-search", "candidate-add"],
+        "conditions": ["用户独立检索组件", "用户将候选加入当前图稿"]
+      },
+      "source": {
+        "reviewId": "dockyard-round1-ui-20260822",
+        "itemId": "R1-2",
+        "original": "组件检索为啥必须要有图稿？",
+        "evidence": "当前检索流程错误地把独立搜索与图稿绑定。"
+      },
+      "rationale": "仅约束组件检索及候选加入的不同条件，不推广到其他图稿相关功能。",
+      "updatedAt": "2026-08-22T12:48:25.009Z"
+    },
+    {
+      "id": "fact.token-panel.color-swatch",
+      "category": "fact",
+      "status": "active",
+      "statement": "颜色 Token 在数值后显示对应色块，以便快速辨认。",
+      "scope": {
+        "surfaces": ["tokens"],
+        "components": ["token-panel", "token-swatch"],
+        "conditions": ["审查颜色 Token 的可识别性", "展示颜色变量"]
+      },
+      "source": {
+        "reviewId": "dockyard-round1-ui-20260822",
+        "itemId": "R1-3",
+        "original": "token表里面已经是这样的了，审查表里不是这样吗？",
+        "evidence": "Token 页已有 token-swatch 显示。"
+      },
+      "rationale": "这是 Token 面板当前事实，不构成其他组件的通用视觉规则。",
+      "updatedAt": "2026-08-22T12:48:25.009Z"
+    },
+    {
+      "id": "constraint.review.confirmed-token-boundary",
+      "category": "hard-constraint",
+      "status": "active",
+      "statement": "只有用户接受且关联到该评审项的 Token 变化，才能更新已确认项目状态。",
+      "scope": {
+        "surfaces": ["review"],
+        "components": ["review-template", "decision-record"],
+        "conditions": ["记录评审决定", "更新项目 Token"]
+      },
+      "source": {
+        "reviewId": "dockyard-round1-ui-20260822",
+        "itemId": "R1-4",
+        "original": "候选方案与已确认设计状态需要明确分离"
+      },
+      "rationale": "保留明确确认边界，不把它改写成可自由解释的偏好。",
+      "updatedAt": "2026-08-22T12:48:25.009Z"
+    }
+  ]
+}

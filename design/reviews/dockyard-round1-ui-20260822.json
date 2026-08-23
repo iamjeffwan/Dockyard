@@ -1,0 +1,85 @@
+{
+  "protocol": "dockyard-ui",
+  "version": "1.1",
+  "id": "dockyard-round1-ui-20260822",
+  "mode": "static",
+  "target": {
+    "surface": "Dockyard work bar and compact extensions",
+    "components": [
+      "bar-horizontal",
+      "component-search",
+      "token-panel",
+      "decision-panel"
+    ]
+  },
+  "summary": {
+    "title": "Dockyard 第一轮界面评审",
+    "description": "逐项确认工作条入口、组件检索反馈、颜色变量辨识和设计决策边界。画布行为、数据流、持久化与动效不在本轮范围内。"
+  },
+  "changes": [
+    {
+      "token": "sizing.bar.expanded-width",
+      "from": "620px",
+      "to": "660px",
+      "affectedComponents": [
+        "bar-horizontal",
+        "bar-window"
+      ],
+      "reason": "为图稿、组件、Token 和决策四个稳定入口保留可读宽度，同时维持右下角紧凑工作条形态。",
+      "sourcePrompt": "按第一轮建议改进工作条、组件检索、Token 与决策视图。",
+      "status": "proposed"
+    }
+  ],
+  "reviewItems": [
+    {
+      "id": "R1-1",
+      "priority": "P1",
+      "category": "导航结构",
+      "title": "工作条缺少稳定的 Token 与决策入口",
+      "currentState": "工作条主要呈现图稿和组件，设计变量与确认记录没有形成同一工作区内的稳定入口。",
+      "proposedState": "保留图稿、组件、Token、决策四个清晰模块，并适度增加工作条宽度，仍维持右下角紧凑形态。",
+      "source": ["src/main.tsx", "src/styles.css"],
+      "changeTokens": ["sizing.bar.expanded-width"]
+    },
+    {
+      "id": "R1-2",
+      "priority": "P1",
+      "category": "交互反馈",
+      "title": "组件检索的空状态与禁用状态不够明确",
+      "currentState": "检索依赖已有图稿；没有图稿时，用户难以判断下一步操作以及按钮为何不可用。",
+      "proposedState": "补充无图稿引导、明确禁用反馈，并为候选结果提供清晰的“加入当前图稿”操作。",
+      "source": ["src/main.tsx"],
+      "changeTokens": []
+    },
+    {
+      "id": "R1-3",
+      "priority": "P2",
+      "category": "变量辨识",
+      "title": "颜色变量仅显示数值，不利于快速辨认",
+      "currentState": "颜色值需要用户根据十六进制文本自行想象，扫描多个变量时判断成本较高。",
+      "proposedState": "在每个颜色值后显示对应色块，同时保留原始数值，兼顾快速辨认和准确读取。",
+      "source": ["src/main.tsx", "src/styles.css"],
+      "changeTokens": []
+    },
+    {
+      "id": "R1-4",
+      "priority": "P1",
+      "category": "决策边界",
+      "title": "候选方案与已确认设计状态需要明确分离",
+      "currentState": "评审结果与项目变量虽然已有数据边界，但页面没有充分说明候选不会直接覆盖已确认状态。",
+      "proposedState": "在评审页逐项记录接受、拒绝或讨论；只有最终明确接受的变量变化才能更新项目基线。",
+      "source": ["design/DESIGN.md", "scripts/dockyard-mcp.mjs"],
+      "changeTokens": []
+    }
+  ],
+  "artifacts": [
+    {
+      "kind": "html-preview",
+      "path": "design/reviews/dockyard-round1-ui.html",
+      "label": "第一轮 UI 逐项评审"
+    }
+  ],
+  "status": "proposed",
+  "createdAt": "2026-08-22T08:40:00Z",
+  "receivedAt": "2026-08-22T08:42:01.274Z"
+}

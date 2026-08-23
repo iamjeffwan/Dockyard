@@ -1,0 +1,7 @@
+interface:
+  display_name: "Dockyard UI Design"
+  short_description: "Apply Dockyard UI rules and record token changes"
+  brand_color: "#63F4E2"
+  default_prompt: "Use $dockyard-ui-design to revise the requested Dockyard UI and report its token impact."
+policy:
+  allow_implicit_invocation: true

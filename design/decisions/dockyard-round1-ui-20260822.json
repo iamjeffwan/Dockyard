@@ -1,0 +1,40 @@
+{
+  "protocol": "dockyard-ui",
+  "version": "1.1",
+  "reviewId": "dockyard-round1-ui-20260822",
+  "decision": "mixed",
+  "itemDecisions": [
+    {
+      "itemId": "R1-1",
+      "decision": "accepted",
+      "comment": ""
+    },
+    {
+      "itemId": "R1-2",
+      "decision": "discuss",
+      "comment": "组件检索为啥必须要有图稿？"
+    },
+    {
+      "itemId": "R1-4",
+      "decision": "accepted",
+      "comment": ""
+    },
+    {
+      "itemId": "R1-3",
+      "decision": "discuss",
+      "comment": "token表里面已经是这样的了，审查表里不是这样吗？"
+    }
+  ],
+  "selectedChanges": [
+    "sizing.bar.expanded-width"
+  ],
+  "rationale": "逐项评审已完成。R1-2 已核对：独立组件检索不需要图稿，只有加入当前图稿需要图稿；R1-3 已核对：Token 页已显示对应色块，因此不应重复提出。",
+  "decidedAt": "2026-08-22T12:48:25.009Z",
+  "tokenUpdates": [
+    {
+      "path": "sizing.bar.expanded-width",
+      "from": "620px",
+      "to": "660px"
+    }
+  ]
+}

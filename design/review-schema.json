@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dockyard.local/schemas/ui-review.schema.json",
+  "title": "Dockyard UI review proposal",
+  "description": "Structured proposal emitted by Codex for a UI review. The proposal is never a confirmed project state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "version", "id", "mode", "target", "summary", "changes", "reviewItems", "artifacts", "status"],
+  "properties": {
+    "protocol": { "const": "dockyard-ui" },
+    "version": { "const": "1.1" },
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "mode": { "enum": ["static", "motion", "interaction"] },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surface", "components"],
+      "properties": {
+        "surface": { "type": "string", "minLength": 1 },
+        "components": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "description"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["token", "from", "to", "affectedComponents", "reason", "status"],
+        "properties": {
+          "token": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)+$" },
+          "from": {},
+          "to": {},
+          "affectedComponents": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "reason": { "type": "string", "minLength": 1 },
+          "sourcePrompt": { "type": "string" },
+          "status": { "const": "proposed" }
+        }
+      }
+    },
+    "reviewItems": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "priority", "category", "title", "currentState", "proposedState", "changeTokens"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+          "priority": { "enum": ["P0", "P1", "P2", "P3"] },
+          "category": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "currentState": { "type": "string", "minLength": 1 },
+          "proposedState": { "type": "string", "minLength": 1 },
+          "source": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "changeTokens": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)+$" },
+            "uniqueItems": true
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "path"],
+              "properties": {
+                "kind": { "enum": ["image", "motion", "html"] },
+                "path": { "type": "string", "minLength": 1 },
+                "label": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "path"],
+        "properties": {
+          "kind": { "enum": ["html-preview", "image-preview", "motion-preview"] },
+          "path": { "type": "string", "minLength": 1 },
+          "label": { "type": "string" }
+        }
+      }
+    },
+    "status": { "const": "proposed" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "receivedAt": { "type": "string", "format": "date-time" }
+  }
+}
