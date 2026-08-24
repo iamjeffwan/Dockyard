@@ -47,7 +47,25 @@ global-components/<component-id>/
 
 ## Codex CLI 与上下文包
 
-如果本机可用 `Codex CLI`，Dockyard 会调用 `codex exec --json`。组件检索只发送临时手绘草图，不发送原图和普通标注。检索失败时不会生成伪造候选，当前图稿仍可保存。
+如果本机可用 `Codex CLI`，Dockyard 会调用 `codex exec --json`。组件检索只发送临时手绘草图，不发送原图和普通标注。检索过程会显示命令启动、模型事件和完成状态；请求、草图副本、结构约束、事件流、结果与错误日志会随候选缓存保存 14 天。检索失败时不会生成伪造候选，当前图稿仍可保存。
+
+组件检索不会自动回退到本机 `OpenAI` 登录状态。必须先在应用数据目录的 `config/codex.json` 配置并启用供应商；密钥只能通过环境变量提供，不能写入该文件。检索窗口会实时显示过程，点击“查看调用记录”可打开原始产物目录。
+
+```json
+{
+  "version": 1,
+  "enabled": true,
+  "model": "provider-model-name",
+  "provider": {
+    "id": "company_gateway",
+    "name": "Company gateway",
+    "baseUrl": "https://gateway.example.com/v1",
+    "apiKeyEnv": "COMPANY_GATEWAY_API_KEY"
+  }
+}
+```
+
+第三方供应商必须兼容 `Responses API`。远程地址必须使用 `HTTPS`，只有本机地址允许使用 `HTTP`。
 
 “发送给开发助手”会让用户选择目标代码项目，并在项目下生成：
 

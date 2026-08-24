@@ -6,8 +6,11 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
-    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "dev:stop": "node scripts/stop-dev.mjs",
+    "generate:tokens": "node scripts/generate-tokens.mjs",
+    "test:codex-cli": "tsc -p tsconfig.electron.json && node --test test/codex-cli-model.test.mjs",
+    "build": "pnpm run generate:tokens && tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
+    "typecheck": "pnpm run generate:tokens && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "start": "electron . --dockyard-prod --disable-gpu --disable-gpu-compositing --no-sandbox"
   },
   "pnpm": {
@@ -20,7 +23,8 @@
     "@excalidraw/excalidraw": "0.18.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "shadcn": "^4.19.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

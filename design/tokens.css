@@ -1,0 +1,31 @@
+/* Generated from design/project-tokens.json. Do not edit manually. */
+:root {
+  --color-canvas-background: #f5f5f7;
+  --color-text-primary: #1d1d1f;
+  --color-surface-panel: #ffffff;
+  --color-surface-raised: #f5f5f7;
+  --color-border-default: #d2d2d7;
+  --color-text-muted: #6e6e73;
+  --color-accent-primary: #007aff;
+  --color-accent-secondary: #5856d6;
+  --color-feedback-warning: #ff3b30;
+  --typography-family-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --typography-family-mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  --typography-size-xs: 11px;
+  --typography-size-sm: 13px;
+  --typography-size-body: 15px;
+  --typography-size-title: 22px;
+  --spacing-control-gap: 8px;
+  --spacing-panel-gutter: 24px;
+  --spacing-canvas-gutter: 20px;
+  --sizing-bar-expanded-width: 452px;
+  --sizing-bar-height: 64px;
+  --sizing-window-header-height: 56px;
+  --shape-radius-bar: 18px;
+  --shape-radius-panel: 12px;
+  --shape-radius-control: 8px;
+  --motion-transition-standard: 180ms;
+  --motion-easing-standard: ease;
+  --interaction-disabled-opacity: 0.45;
+  --interaction-focus-color: #007aff;
+}
