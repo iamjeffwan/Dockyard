@@ -1,0 +1,70 @@
+{
+  "protocol": "dockyard-ui",
+  "version": "1.1",
+  "id": "dockyard-review-template-v1-1-20260822",
+  "mode": "interaction",
+  "target": {
+    "surface": "Dockyard HTML review artifact",
+    "components": [
+      "review-schema",
+      "review-html-renderer",
+      "review-item-controls",
+      "review-result-summary"
+    ]
+  },
+  "summary": {
+    "title": "Dockyard 固定评审模板升级",
+    "description": "确认评审页由结构化数据稳定生成，并提供逐项决定、评论、本地草稿、进度统计与可复制结果。"
+  },
+  "changes": [],
+  "reviewItems": [
+    {
+      "id": "RT-1",
+      "priority": "P1",
+      "category": "输出稳定性",
+      "title": "评审页结构由固定模板统一生成",
+      "currentState": "旧流程只校验变量变化，页面内容与交互仍可能由模型自由编写，结构容易随轮次漂移。",
+      "proposedState": "协议固定摘要、逐项内容、证据和变量关联，MCP 根据数据统一生成页面并拒绝缺字段输入。",
+      "source": [
+        "design/review-schema.json",
+        "scripts/dockyard-mcp.mjs",
+        "scripts/review-html.mjs"
+      ],
+      "changeTokens": []
+    },
+    {
+      "id": "RT-2",
+      "priority": "P1",
+      "category": "逐项评审",
+      "title": "每条建议独立接受、拒绝或讨论",
+      "currentState": "旧页面只能对整轮方案选择一个结论和填写一段总评论。",
+      "proposedState": "每个评审项都有独立决定与评论；讨论未填写时不计入完成进度，并给出明确提示。",
+      "source": [
+        "scripts/review-html.mjs"
+      ],
+      "changeTokens": []
+    },
+    {
+      "id": "RT-3",
+      "priority": "P2",
+      "category": "审计样式",
+      "title": "采用紧凑的审计报告信息层级",
+      "currentState": "旧页面以双栏对比和单一表单为主，缺少优先级分组、状态统计与固定进度反馈。",
+      "proposedState": "参考审计截图使用深色中性表面、低饱和状态色、优先级分组和底部固定进度条，同时保留 Dockyard 现有视觉变量。",
+      "source": [
+        "scripts/review-html.mjs"
+      ],
+      "changeTokens": []
+    }
+  ],
+  "artifacts": [
+    {
+      "kind": "html-preview",
+      "path": "design/reviews/dockyard-review-template-v1-1-20260822.html",
+      "label": "Dockyard 固定评审模板升级评审页"
+    }
+  ],
+  "status": "proposed",
+  "createdAt": "2026-08-22T10:04:25.1991399Z",
+  "receivedAt": "2026-08-22T10:04:25.302Z"
+}

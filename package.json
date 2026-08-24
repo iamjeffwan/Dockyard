@@ -6,6 +6,8 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "mcp": "node scripts/dockyard-mcp.mjs",
+    "review-bridge": "node scripts/review-bridge.mjs",
     "build": "tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "start": "electron . --dockyard-prod --disable-gpu --disable-gpu-compositing --no-sandbox"

@@ -4,27 +4,29 @@ import net from 'node:net';
 
 const root = process.cwd();
 const port = 5173;
+const reviewPort = 5174;
 const viteCli = join(root, 'node_modules', 'vite', 'bin', 'vite.js');
 const electronBin = join(root, 'node_modules', 'electron', 'dist', 'electron.exe');
 let vite = null;
+let reviewBridge = null;
 let electron = null;
 let stopping = false;
 
-function portOpen() {
+function portOpen(checkPort = port) {
   return new Promise(resolve => {
-    const socket = net.createConnection({ host: 'localhost', port });
+    const socket = net.createConnection({ host: 'localhost', port: checkPort });
     socket.once('connect', () => { socket.destroy(); resolve(true); });
     socket.once('error', () => { socket.destroy(); resolve(false); });
   });
 }
 
-async function waitForPort(timeoutMs = 30_000) {
+async function waitForPort(checkPort = port, timeoutMs = 30_000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    if (await portOpen()) return;
+    if (await portOpen(checkPort)) return;
     await new Promise(resolve => setTimeout(resolve, 150));
   }
-  throw new Error(`Vite 未能在 ${port} 端口启动`);
+  throw new Error(`服务未能在 ${checkPort} 端口启动`);
 }
 
 function killTree(child) {
@@ -44,6 +46,7 @@ function killDockyardElectron() {
 
 function stop(code = 0) {
   if (stopping) return;
+  killTree(reviewBridge);
   stopping = true;
   killTree(electron);
   killTree(vite);
@@ -62,7 +65,10 @@ if (await portOpen()) {
   vite.once('error', error => { console.error('Vite 启动失败:', error.message); stop(1); });
   vite.once('exit', code => { if (!stopping && code !== 0) stop(code || 1); });
   try {
-    await waitForPort();
+    await waitForPort(port);
+    reviewBridge = spawn(process.execPath, [join(root, 'scripts', 'review-bridge.mjs')], { cwd: root, stdio: 'inherit', windowsHide: false, shell: false });
+    reviewBridge.once('error', error => { console.error('评审桥接启动失败:', error.message); stop(1); });
+    await waitForPort(reviewPort);
     electron = spawn(electronBin, ['.', '--disable-gpu', '--disable-gpu-compositing', '--no-sandbox'], { cwd: root, stdio: 'inherit', windowsHide: false, shell: false });
     electron.once('error', error => { console.error('Electron 启动失败:', error.message); stop(1); });
     electron.once('exit', code => stop(code || 0));
