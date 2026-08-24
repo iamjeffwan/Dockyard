@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import net from 'node:net';
 
@@ -9,6 +9,7 @@ const electronBin = join(root, 'node_modules', 'electron', 'dist', 'electron.exe
 let vite = null;
 let electron = null;
 let stopping = false;
+let cleaned = false;
 
 function portOpen() {
   return new Promise(resolve => {
@@ -30,29 +31,36 @@ async function waitForPort(timeoutMs = 30_000) {
 function killTree(child) {
   if (!child?.pid) return;
   if (process.platform === 'win32') {
-    execFile('taskkill', ['/pid', String(child.pid), '/t', '/f'], () => {});
-  } else {
-    child.kill('SIGTERM');
+    spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' });
+    return;
   }
+  child.kill('SIGTERM');
 }
 
 function killDockyardElectron() {
   if (process.platform !== 'win32') return;
   const target = electronBin.replaceAll("'", "''");
-  execFile('powershell.exe', ['-NoProfile', '-Command', `$target='${target}'; Get-Process -Name electron -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $target } | Stop-Process -Force`], () => {});
+  spawnSync('powershell.exe', ['-NoProfile', '-Command', `$target='${target}'; Get-Process -Name electron -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $target } | Stop-Process -Force`], { stdio: 'ignore' });
+}
+
+function cleanup() {
+  if (cleaned) return;
+  cleaned = true;
+  killTree(electron);
+  killTree(vite);
+  killDockyardElectron();
 }
 
 function stop(code = 0) {
   if (stopping) return;
   stopping = true;
-  killTree(electron);
-  killTree(vite);
-  killDockyardElectron();
-  setTimeout(() => process.exit(code), 250);
+  cleanup();
+  process.exit(code);
 }
 
 process.on('SIGINT', () => stop(0));
 process.on('SIGTERM', () => stop(0));
+process.on('exit', cleanup);
 
 if (await portOpen()) {
   console.error(`端口 ${port} 已被占用，请先关闭已有的 Dockyard/Vite 开发进程。`);
