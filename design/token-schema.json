@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dockyard.local/schemas/project-tokens.schema.json",
+  "title": "Dockyard project token state",
+  "description": "A value-neutral structure for recording the visual and interaction variables used by a project.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "project", "status", "tokens"],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "project": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["baseline", "proposed", "confirmed"] },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "tokens": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/token" },
+      "uniqueItems": true
+    },
+    "changes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/change" }
+    }
+  },
+  "$defs": {
+    "category": {
+      "enum": ["color", "typography", "spacing", "sizing", "shape", "motion", "interaction"]
+    },
+    "scope": {
+      "enum": ["global", "project", "component", "state"]
+    },
+    "value": {
+      "description": "A project value. The schema classifies its type but intentionally does not prescribe a palette, scale, or visual answer.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "object", "additionalProperties": true },
+        { "type": "array", "items": {} }
+      ]
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "category", "type", "value", "scope", "status", "source", "usedBy"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)+$",
+          "description": "Stable semantic path such as color.canvas.background."
+        },
+        "category": { "$ref": "#/$defs/category" },
+        "type": {
+          "enum": ["color", "font-family", "font-size", "font-weight", "length", "duration", "easing", "opacity", "shadow", "transform", "boolean", "string", "number", "object"]
+        },
+        "value": { "$ref": "#/$defs/value" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "component": { "type": "string" },
+        "status": { "enum": ["baseline", "proposed", "confirmed", "deprecated"] },
+        "source": { "enum": ["css", "design-document", "model", "user", "imported"] },
+        "description": { "type": "string" },
+        "usedBy": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "rationale": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "token", "from", "to", "affectedComponents", "reason", "status"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "token": { "type": "string" },
+        "from": { "$ref": "#/$defs/value" },
+        "to": { "$ref": "#/$defs/value" },
+        "affectedComponents": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "reason": { "type": "string" },
+        "sourcePrompt": { "type": "string" },
+        "status": { "enum": ["proposed", "accepted", "rejected", "superseded"] },
+        "reviewId": { "type": "string" },
+        "decidedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

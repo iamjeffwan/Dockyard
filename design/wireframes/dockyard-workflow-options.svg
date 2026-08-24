@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1040" viewBox="0 0 1600 1040">
+  <style>
+    .page { fill: #f7f7f5; }
+    .frame { fill: #fff; stroke: #222; stroke-width: 2; }
+    .line { fill: none; stroke: #333; stroke-width: 2; }
+    .thin { fill: none; stroke: #888; stroke-width: 1.5; }
+    .fill { fill: #e8e8e5; stroke: #444; stroke-width: 1.5; }
+    .dark { fill: #333; }
+    .title { font: 700 20px Arial, sans-serif; fill: #111; }
+    .label { font: 600 14px Arial, sans-serif; fill: #222; }
+    .small { font: 12px Arial, sans-serif; fill: #555; }
+    .tiny { font: 11px Arial, sans-serif; fill: #666; }
+    .center { text-anchor: middle; }
+  </style>
+
+  <rect class="page" width="1600" height="1040"/>
+  <text x="40" y="38" class="title">Dockyard 工作流管理线稿：三种结构方向</text>
+  <text x="40" y="62" class="small">只讨论信息层级和操作位置，不代表正式视觉设计。</text>
+
+  <!-- Option A -->
+  <g transform="translate(40 92)">
+    <rect class="frame" width="480" height="890" rx="4"/>
+    <text x="22" y="34" class="title">A / 项目工作台</text>
+    <text x="22" y="56" class="small">以项目和设计会话为主</text>
+    <rect class="fill" x="18" y="76" width="444" height="42"/>
+    <text x="34" y="102" class="label">Dockyard</text>
+    <text x="280" y="102" class="small">项目：Dockyard</text>
+    <rect class="fill" x="18" y="136" width="112" height="730"/>
+    <text x="34" y="164" class="label">项目</text>
+    <rect class="frame" x="30" y="180" width="88" height="30"/>
+    <text x="42" y="200" class="small">Dockyard</text>
+    <rect class="frame" x="30" y="218" width="88" height="30"/>
+    <text x="42" y="238" class="small">GameViewer</text>
+    <text x="34" y="282" class="label">设计会话</text>
+    <rect class="frame" x="30" y="298" width="88" height="44"/>
+    <text x="42" y="317" class="tiny">组件检索页</text>
+    <text x="42" y="333" class="tiny">局部审查</text>
+    <rect class="frame" x="30" y="350" width="88" height="44"/>
+    <text x="42" y="369" class="tiny">图稿编辑器</text>
+    <text x="42" y="385" class="tiny">已完成</text>
+    <rect class="line" x="144" y="136" width="202" height="730"/>
+    <text x="162" y="164" class="label">当前会话</text>
+    <text x="162" y="190" class="small">组件检索页</text>
+    <rect class="fill" x="162" y="210" width="166" height="260"/>
+    <rect class="frame" x="180" y="232" width="130" height="48"/>
+    <rect class="frame" x="180" y="298" width="88" height="108"/>
+    <rect class="frame" x="276" y="298" width="34" height="108"/>
+    <text x="245" y="440" class="tiny center">当前 UI 预览</text>
+    <rect class="frame" x="162" y="494" width="166" height="44"/>
+    <text x="180" y="521" class="small">[开始审查]</text>
+    <rect class="frame" x="162" y="554" width="166" height="44"/>
+    <text x="180" y="581" class="small">[继续设计]</text>
+    <text x="162" y="646" class="label">最近活动</text>
+    <line class="thin" x1="162" y1="664" x2="328" y2="664"/>
+    <line class="thin" x1="162" y1="690" x2="328" y2="690"/>
+    <line class="thin" x1="162" y1="716" x2="328" y2="716"/>
+    <rect class="fill" x="360" y="136" width="102" height="730"/>
+    <text x="374" y="164" class="label">项目资料</text>
+    <text x="374" y="198" class="small">DESIGN.md</text>
+    <text x="374" y="228" class="small">Token</text>
+    <text x="374" y="258" class="small">线框</text>
+    <text x="374" y="288" class="small">决策记录</text>
+    <line class="thin" x1="374" y1="316" x2="448" y2="316"/>
+    <text x="374" y="350" class="tiny">当前阶段</text>
+    <text x="374" y="370" class="label">审查中</text>
+  </g>
+
+  <!-- Option B -->
+  <g transform="translate(560 92)">
+    <rect class="frame" width="480" height="890" rx="4"/>
+    <text x="22" y="34" class="title">B / 审查工作台</text>
+    <text x="22" y="56" class="small">以当前待处理建议为主</text>
+    <rect class="fill" x="18" y="76" width="444" height="42"/>
+    <text x="34" y="102" class="label">组件检索页</text>
+    <text x="318" y="102" class="small">3 条待审查</text>
+    <rect class="fill" x="18" y="136" width="108" height="730"/>
+    <text x="32" y="164" class="label">待审查</text>
+    <rect class="frame" x="30" y="180" width="84" height="58"/>
+    <text x="42" y="201" class="small">主按钮</text>
+    <text x="42" y="220" class="tiny">颜色</text>
+    <rect class="frame" x="30" y="250" width="84" height="58"/>
+    <text x="42" y="271" class="small">卡片</text>
+    <text x="42" y="290" class="tiny">间距</text>
+    <rect class="frame" x="30" y="320" width="84" height="58"/>
+    <text x="42" y="341" class="small">拖入</text>
+    <text x="42" y="360" class="tiny">动效</text>
+    <text x="32" y="430" class="label">已完成</text>
+    <line class="thin" x1="32" y1="450" x2="110" y2="450"/>
+    <line class="thin" x1="32" y1="478" x2="110" y2="478"/>
+    <line class="thin" x1="32" y1="506" x2="110" y2="506"/>
+    <text x="144" y="164" class="label">当前审查：主按钮颜色</text>
+    <rect class="line" x="144" y="184" width="190" height="270"/>
+    <text x="239" y="210" class="small center">当前版本</text>
+    <rect class="fill" x="164" y="230" width="150" height="180"/>
+    <rect class="frame" x="184" y="256" width="110" height="38"/>
+    <rect class="dark" x="184" y="320" width="110" height="28"/>
+    <text x="239" y="430" class="tiny center">静态预览</text>
+    <rect class="line" x="348" y="184" width="114" height="270"/>
+    <text x="405" y="210" class="small center">候选版本</text>
+    <rect class="fill" x="364" y="230" width="82" height="180"/>
+    <rect class="frame" x="374" y="256" width="62" height="38"/>
+    <rect class="dark" x="374" y="320" width="62" height="28"/>
+    <text x="405" y="430" class="tiny center">可交互预览</text>
+    <rect class="fill" x="144" y="482" width="318" height="150"/>
+    <text x="160" y="510" class="label">变更</text>
+    <text x="160" y="538" class="small">color.button.primary</text>
+    <text x="160" y="563" class="tiny">原值  #63f4e2</text>
+    <text x="160" y="585" class="tiny">新值  #8ab4ff</text>
+    <text x="160" y="607" class="tiny">影响：SearchButton</text>
+    <rect class="frame" x="144" y="656" width="92" height="42"/>
+    <text x="190" y="682" class="small center">拒绝</text>
+    <rect class="frame" x="246" y="656" width="92" height="42"/>
+    <text x="292" y="682" class="small center">讨论</text>
+    <rect class="dark" x="348" y="656" width="114" height="42"/>
+    <text x="405" y="682" fill="#fff" class="small center">接受并保存</text>
+    <rect class="line" x="144" y="730" width="318" height="70"/>
+    <text x="160" y="758" class="tiny">反馈：保留强调作用，但降低亮度</text>
+  </g>
+
+  <!-- Option C -->
+  <g transform="translate(1080 92)">
+    <rect class="frame" width="480" height="890" rx="4"/>
+    <text x="22" y="34" class="title">C / 阶段流程工作台</text>
+    <text x="22" y="56" class="small">以工作流阶段和产物为主</text>
+    <rect class="fill" x="18" y="76" width="444" height="74"/>
+    <text x="32" y="100" class="label">设计流程</text>
+    <line class="line" x1="42" y1="126" x2="432" y2="126"/>
+    <circle cx="62" cy="126" r="11" fill="#333"/>
+    <circle cx="160" cy="126" r="11" fill="#333"/>
+    <circle cx="258" cy="126" r="11" fill="#333"/>
+    <circle cx="356" cy="126" r="11" fill="#fff" stroke="#333" stroke-width="2"/>
+    <circle cx="432" cy="126" r="11" fill="#fff" stroke="#333" stroke-width="2"/>
+    <text x="62" y="112" class="tiny center">线框</text>
+    <text x="160" y="112" class="tiny center">初版</text>
+    <text x="258" y="112" class="tiny center">审查</text>
+    <text x="356" y="112" class="tiny center">动效</text>
+    <text x="432" y="112" class="tiny center">交付</text>
+    <rect class="fill" x="18" y="168" width="444" height="110"/>
+    <text x="32" y="196" class="label">当前阶段：局部审查</text>
+    <text x="32" y="224" class="small">目标：调整组件检索页主按钮颜色</text>
+    <rect class="frame" x="32" y="242" width="102" height="24"/>
+    <text x="83" y="259" class="tiny center">[开始候选]</text>
+    <rect class="line" x="18" y="296" width="444" height="430"/>
+    <text x="32" y="324" class="label">阶段工作区</text>
+    <rect class="fill" x="32" y="344" width="416" height="160"/>
+    <text x="240" y="372" class="small center">当前 HTML 预览</text>
+    <rect class="frame" x="52" y="392" width="376" height="82"/>
+    <rect class="frame" x="80" y="412" width="118" height="28"/>
+    <rect class="dark" x="222" y="412" width="118" height="28"/>
+    <rect class="fill" x="32" y="526" width="416" height="112"/>
+    <text x="48" y="554" class="label">阶段产物</text>
+    <text x="48" y="582" class="small">线框 ✓    初版 ✓    审查 ●    动效 ○</text>
+    <text x="48" y="608" class="tiny">当前 Token：12 个    待确认变更：1 个</text>
+    <rect class="frame" x="18" y="748" width="212" height="74"/>
+    <text x="34" y="777" class="small">[返回上一阶段]</text>
+    <rect class="dark" x="250" y="748" width="212" height="74"/>
+    <text x="356" y="777" fill="#fff" class="small center">[接受并进入下一阶段]</text>
+  </g>
+</svg>

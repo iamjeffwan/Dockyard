@@ -10,8 +10,8 @@ declare global {
       pickProject: () => Promise<{ path: string; name: string } | null>;
       openContext: (path: string) => Promise<void>;
       syncDesign: (workspace: Workspace) => void;
-      openPanel: (view: 'annotator' | 'component-search') => Promise<void>;
-      closePanel: (view: 'annotator' | 'component-search') => Promise<void>;
+      openPanel: (view: 'annotator' | 'component-search' | 'tokens' | 'decisions') => Promise<void>;
+      closePanel: (view: 'annotator' | 'component-search' | 'tokens' | 'decisions') => Promise<void>;
       showBar: () => Promise<void>;
       hideBar: () => Promise<void>;
       onDesignState: (listener: (workspace: Workspace) => void) => () => void;

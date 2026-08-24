@@ -1,0 +1,429 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": "dockyard",
+  "status": "confirmed",
+  "updatedAt": "2026-08-22T12:48:25.009Z",
+  "tokens": [
+    {
+      "path": "color.canvas.background",
+      "category": "color",
+      "type": "color",
+      "value": "#0b0e0f",
+      "scope": "project",
+      "status": "baseline",
+      "source": "css",
+      "description": "应用和桌面工作区的基础背景。",
+      "usedBy": [
+        "body",
+        "panel-shell"
+      ]
+    },
+    {
+      "path": "color.text.primary",
+      "category": "color",
+      "type": "color",
+      "value": "#f4f2eb",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "主要文字。",
+      "usedBy": [
+        "bar-shell",
+        "window-title",
+        "empty-canvas"
+      ]
+    },
+    {
+      "path": "color.surface.panel",
+      "category": "color",
+      "type": "color",
+      "value": "#111617",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "主要面板表面。",
+      "usedBy": [
+        "panel-shell",
+        "select-field"
+      ]
+    },
+    {
+      "path": "color.surface.raised",
+      "category": "color",
+      "type": "color",
+      "value": "#172021",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "抬升的控件或卡片表面。",
+      "usedBy": [
+        "bar-context",
+        "artwork-chip",
+        "library-pill"
+      ]
+    },
+    {
+      "path": "color.border.default",
+      "category": "color",
+      "type": "color",
+      "value": "#2a3838",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "默认分隔线和边框。",
+      "usedBy": [
+        "bar-rule",
+        "stage-grid",
+        "window-header"
+      ]
+    },
+    {
+      "path": "color.text.muted",
+      "category": "color",
+      "type": "color",
+      "value": "#82908b",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "辅助文字和次要信息。",
+      "usedBy": [
+        "eyebrow",
+        "tool-heading",
+        "panel-hint"
+      ]
+    },
+    {
+      "path": "color.accent.primary",
+      "category": "color",
+      "type": "color",
+      "value": "#e7ff63",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "主要操作和已选状态。",
+      "usedBy": [
+        "bar-action.primary",
+        "canvas-tool.active",
+        "artwork-chip.selected"
+      ]
+    },
+    {
+      "path": "color.accent.secondary",
+      "category": "color",
+      "type": "color",
+      "value": "#63f4e2",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "次要强调、状态和候选来源。",
+      "usedBy": [
+        "bar-send",
+        "status-pulse",
+        "component-chip"
+      ]
+    },
+    {
+      "path": "color.feedback.warning",
+      "category": "color",
+      "type": "color",
+      "value": "#ff8a65",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "警示和危险操作。",
+      "usedBy": [
+        "canvas-tool.danger",
+        "kind.reference"
+      ]
+    },
+    {
+      "path": "typography.family.ui",
+      "category": "typography",
+      "type": "font-family",
+      "value": "Manrope, 'Segoe UI', sans-serif",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "导航、正文和控件字体。",
+      "usedBy": [
+        "body",
+        "button",
+        "textarea"
+      ]
+    },
+    {
+      "path": "typography.family.mono",
+      "category": "typography",
+      "type": "font-family",
+      "value": "'DM Mono', monospace",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "Token 路径、状态、快捷键和紧凑元数据。",
+      "usedBy": [
+        "eyebrow",
+        "tool-heading",
+        "kbd"
+      ]
+    },
+    {
+      "path": "typography.size.xs",
+      "category": "typography",
+      "type": "font-size",
+      "value": "9px",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "辅助标签和元数据。",
+      "usedBy": [
+        "bar-brand strong",
+        "eyebrow",
+        "kbd"
+      ]
+    },
+    {
+      "path": "typography.size.sm",
+      "category": "typography",
+      "type": "font-size",
+      "value": "10px",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "紧凑控件和候选信息。",
+      "usedBy": [
+        "bar-action",
+        "candidate-info",
+        "canvas-actions"
+      ]
+    },
+    {
+      "path": "typography.size.body",
+      "category": "typography",
+      "type": "font-size",
+      "value": "12px",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "表单和正文。",
+      "usedBy": [
+        "search-intro p",
+        "select-field",
+        "textarea"
+      ]
+    },
+    {
+      "path": "typography.size.title",
+      "category": "typography",
+      "type": "font-size",
+      "value": "20px",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "窗口标题。",
+      "usedBy": [
+        "window-title h1"
+      ]
+    },
+    {
+      "path": "spacing.control.gap",
+      "category": "spacing",
+      "type": "length",
+      "value": "8px",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "常规控件之间的间距。",
+      "usedBy": [
+        "bar-shell",
+        "candidate-list",
+        "library-pills"
+      ]
+    },
+    {
+      "path": "spacing.panel.gutter",
+      "category": "spacing",
+      "type": "length",
+      "value": "19px",
+      "scope": "project",
+      "status": "baseline",
+      "source": "css",
+      "description": "工作区侧栏内容的内边距。",
+      "usedBy": [
+        "annotator-tools",
+        "annotator-inspector",
+        "artwork-rail"
+      ]
+    },
+    {
+      "path": "spacing.canvas.gutter",
+      "category": "spacing",
+      "type": "length",
+      "value": "18px",
+      "scope": "project",
+      "status": "baseline",
+      "source": "css",
+      "description": "画布工具栏和舞台的水平留白。",
+      "usedBy": [
+        "annotator-canvas"
+      ]
+    },
+    {
+      "path": "sizing.bar.expanded-width",
+      "category": "sizing",
+      "type": "length",
+      "value": "660px",
+      "scope": "project",
+      "status": "confirmed",
+      "source": "user",
+      "description": "横向工作条的最大宽度。",
+      "usedBy": [
+        "bar-horizontal"
+      ],
+      "updatedAt": "2026-08-22T12:48:25.009Z"
+    },
+    {
+      "path": "sizing.bar.height",
+      "category": "sizing",
+      "type": "length",
+      "value": "86px",
+      "scope": "project",
+      "status": "baseline",
+      "source": "css",
+      "description": "横向工作条的稳定高度。",
+      "usedBy": [
+        "bar-horizontal"
+      ]
+    },
+    {
+      "path": "sizing.window.header-height",
+      "category": "sizing",
+      "type": "length",
+      "value": "68px",
+      "scope": "project",
+      "status": "baseline",
+      "source": "css",
+      "description": "工具窗口标题栏高度。",
+      "usedBy": [
+        "window-header"
+      ]
+    },
+    {
+      "path": "shape.radius.bar",
+      "category": "shape",
+      "type": "length",
+      "value": "22px",
+      "scope": "project",
+      "status": "baseline",
+      "source": "css",
+      "description": "横向工作条圆角。",
+      "usedBy": [
+        "bar-horizontal"
+      ]
+    },
+    {
+      "path": "shape.radius.panel",
+      "category": "shape",
+      "type": "length",
+      "value": "15px",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "画布和主要面板圆角。",
+      "usedBy": [
+        "stage-frame",
+        "excalidraw-wrap",
+        "sketch-box"
+      ]
+    },
+    {
+      "path": "shape.radius.control",
+      "category": "shape",
+      "type": "length",
+      "value": "7px",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "输入框和主要控件圆角。",
+      "usedBy": [
+        "select-field",
+        "textarea",
+        "search-btn"
+      ]
+    },
+    {
+      "path": "motion.transition.standard",
+      "category": "motion",
+      "type": "duration",
+      "value": "180ms",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "控件悬停和状态过渡。",
+      "usedBy": [
+        "bar-action",
+        "candidate-card",
+        "bar-shell"
+      ]
+    },
+    {
+      "path": "motion.easing.standard",
+      "category": "motion",
+      "type": "easing",
+      "value": "ease",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "默认过渡曲线。",
+      "usedBy": [
+        "bar-action",
+        "candidate-card",
+        "bar-shell"
+      ]
+    },
+    {
+      "path": "interaction.disabled.opacity",
+      "category": "interaction",
+      "type": "opacity",
+      "value": 0.45,
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "禁用控件的可见度。",
+      "usedBy": [
+        "canvas-tool:disabled",
+        "search-btn:disabled"
+      ]
+    },
+    {
+      "path": "interaction.focus.color",
+      "category": "interaction",
+      "type": "color",
+      "value": "#63f4e2",
+      "scope": "global",
+      "status": "baseline",
+      "source": "css",
+      "description": "键盘焦点和输入聚焦的强调色。",
+      "usedBy": [
+        "textarea:focus",
+        "bar-send:hover"
+      ]
+    }
+  ],
+  "changes": [
+    {
+      "id": "dockyard-round1-ui-20260822:sizing.bar.expanded-width",
+      "token": "sizing.bar.expanded-width",
+      "from": "620px",
+      "to": "660px",
+      "affectedComponents": [
+        "bar-horizontal",
+        "bar-window"
+      ],
+      "reason": "为图稿、组件、Token 和决策四个稳定入口保留可读宽度，同时维持右下角紧凑工作条形态。",
+      "sourcePrompt": "按第一轮建议改进工作条、组件检索、Token 与决策视图。",
+      "status": "accepted",
+      "reviewId": "dockyard-round1-ui-20260822",
+      "decidedAt": "2026-08-22T12:48:25.009Z"
+    }
+  ]
+}
