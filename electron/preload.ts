@@ -22,6 +22,14 @@ contextBridge.exposeInMainWorld("dockyard", {
   syncDesign: (workspace: unknown) =>
     ipcRenderer.send("design:sync", workspace),
   mcpPort: () => ipcRenderer.invoke("mcp:port"),
+  storybookSources: () => ipcRenderer.invoke("storybook:sources"),
+  storybookCatalog: (sourceId: string) =>
+    ipcRenderer.invoke("storybook:catalog", sourceId),
+  storybookCheck: (sourceId: string) =>
+    ipcRenderer.invoke("storybook:check", sourceId),
+  storybookMeasureFrame: (storyUrl: string) =>
+    ipcRenderer.invoke("storybook:measure-frame", storyUrl),
+  captureViewport: () => ipcRenderer.invoke("artwork:capture-viewport"),
   openPanel: (
     view: "annotator" | "component-search" | "tokens" | "decisions",
   ) => ipcRenderer.invoke("panel:open", view),

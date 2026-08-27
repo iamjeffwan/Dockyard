@@ -2,6 +2,8 @@ import type {
   CacheStatus,
   CodexTraceEvent,
   ComponentSearchResult,
+  StorybookCatalog,
+  StorybookSource,
   Workspace,
 } from "./types";
 
@@ -38,6 +40,15 @@ declare global {
       hideBar: () => Promise<void>;
       onDesignState: (listener: (workspace: Workspace) => void) => () => void;
       mcpPort: () => Promise<number>;
+      storybookSources: () => Promise<StorybookSource[]>;
+      storybookCatalog: (sourceId: string) => Promise<StorybookCatalog>;
+      storybookCheck: (sourceId: string) => Promise<StorybookSource>;
+      storybookMeasureFrame: (storyUrl: string) => Promise<{
+        width: number; height: number; x: number; y: number;
+        viewportWidth: number; viewportHeight: number;
+        tag?: string; className?: string; boxShadow?: string; frameUrl?: string;
+      }>;
+      captureViewport: () => Promise<string | null>;
     };
   }
 }

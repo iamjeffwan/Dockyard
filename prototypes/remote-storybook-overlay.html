@@ -1,0 +1,94 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Dockyard remote Storybook overlay prototype</title>
+<style>
+  :root { font: 14px/1.45 system-ui, sans-serif; color: #172033; background: #eef2f7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: grid; grid-template-columns: 260px 1fr; overflow: hidden; }
+  aside { padding: 20px; background: #fff; border-right: 1px solid #dbe3ef; }
+  h1 { margin: 0 0 8px; font-size: 18px; }
+  p { color: #64748b; margin: 0 0 18px; }
+  button { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; background: #fff; cursor: pointer; }
+  button:hover { border-color: #2563eb; color: #2563eb; }
+  .controls { display: grid; gap: 8px; margin-bottom: 18px; }
+  .zoom { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  dl { margin: 0; display: grid; grid-template-columns: 80px 1fr; gap: 7px 8px; font-size: 12px; }
+  dt { color: #64748b; } dd { margin: 0; word-break: break-word; }
+  code { font-size: 11px; color: #334155; }
+  main { position: relative; overflow: hidden; background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 24px 24px; }
+  .hint { position: absolute; left: 20px; top: 16px; z-index: 2; padding: 8px 10px; border-radius: 8px; background: rgb(255 255 255 / 88%); color: #64748b; box-shadow: 0 4px 18px rgb(15 23 42 / 8%); }
+  #world { position: absolute; left: 0; top: 0; width: 1px; height: 1px; transform-origin: 0 0; }
+  .node { position: absolute; width: 180px; height: 76px; transform: translate(-50%, -50%); overflow: visible; cursor: grab; touch-action: none; }
+  .node:active { cursor: grabbing; }
+  .node iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; pointer-events: none; }
+  .node-label { position: absolute; left: 0; top: -18px; z-index: 2; padding: 2px 5px; border-radius: 5px; color: #1e3a8a; background: rgb(219 234 254 / 90%); font-size: 10px; pointer-events: none; }
+  .crosshair { position: absolute; width: 8px; height: 8px; border: 2px solid #2563eb; border-radius: 50%; transform: translate(-50%, -50%); }
+</style>
+<aside>
+  <h1>远程组件渲染层</h1>
+  <p>这个原型验证：组件 ID 如何映射到 Storybook 地址，以及 iframe 如何跟随画板缩放和平移。</p>
+  <div class="controls">
+    <button id="add">添加 Button 组件</button>
+    <div class="zoom"><button id="zoomOut">画布−</button><button id="reset">重置</button><button id="zoomIn">画布＋</button></div>
+    <div class="zoom"><button id="nodeZoomOut">组件−</button><button id="nodeReset">组件 100%</button><button id="nodeZoomIn">组件＋</button></div>
+    <div class="zoom"><button id="left">←</button><button id="up">↑</button><button id="right">→</button></div>
+    <button id="down">向下平移</button>
+  </div>
+  <dl id="state"></dl>
+</aside>
+<main id="board"><div class="hint">画板模拟区：使用左侧按钮观察 iframe 的定位变化</div><div id="world"><div id="crosshair" class="crosshair"></div></div></main>
+<script>
+  // 可迁移的核心模型：组件引用保存世界坐标，视图只负责把世界坐标变换到画布。
+  const initial = { componentId: "carbon.button", storyUrl: "http://127.0.0.1:6006/iframe.html?id=ui-button--button-primary&viewMode=story", world: { x: 420, y: 260 }, zoom: 1, componentScale: 1, pan: { x: 0, y: 0 } };
+  const state = structuredClone(initial);
+  const world = document.querySelector("#world");
+  const stateEl = document.querySelector("#state");
+  const board = document.querySelector("#board");
+  function render() {
+    world.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+    let node = document.querySelector(".node");
+    if (!node) {
+      node = document.createElement("div"); node.className = "node";
+      node.innerHTML = `<div class="node-label"></div><iframe title="远程 Storybook 组件"></iframe>`;
+      world.append(node);
+      let dragging = false;
+      let start = { x: 0, y: 0, worldX: 0, worldY: 0 };
+      node.addEventListener("pointerdown", (event) => {
+        dragging = true;
+        node.setPointerCapture(event.pointerId);
+        start = { x: event.clientX, y: event.clientY, worldX: state.world.x, worldY: state.world.y };
+      });
+      node.addEventListener("pointermove", (event) => {
+        if (!dragging) return;
+        state.world.x = Math.round(start.worldX + (event.clientX - start.x) / state.zoom);
+        state.world.y = Math.round(start.worldY + (event.clientY - start.y) / state.zoom);
+        render();
+      });
+      node.addEventListener("pointerup", (event) => {
+        dragging = false;
+        node.releasePointerCapture(event.pointerId);
+      });
+    }
+    node.style.left = `${state.world.x}px`; node.style.top = `${state.world.y}px`;
+    node.style.transform = `translate(-50%, -50%) scale(${state.componentScale})`;
+    node.querySelector(".node-label").textContent = state.componentId;
+    const iframe = node.querySelector("iframe");
+    if (iframe.src !== state.storyUrl) iframe.src = state.storyUrl;
+    document.querySelector("#crosshair").style.left = `${state.world.x}px`;
+    document.querySelector("#crosshair").style.top = `${state.world.y}px`;
+    stateEl.innerHTML = `<dt>组件 ID</dt><dd><code>${state.componentId}</code></dd><dt>Story 地址</dt><dd><code>${state.storyUrl}</code></dd><dt>世界坐标</dt><dd>${state.world.x}, ${state.world.y}</dd><dt>画布缩放</dt><dd>${Math.round(state.zoom * 100)}%</dd><dt>组件缩放</dt><dd>${Math.round(state.componentScale * 100)}%</dd><dt>画布平移</dt><dd>${state.pan.x}, ${state.pan.y}</dd>`;
+  }
+  function move(x, y) { state.pan.x += x; state.pan.y += y; render(); }
+  document.querySelector("#add").onclick = () => { state.componentId = "carbon.button"; state.storyUrl = "http://127.0.0.1:6006/iframe.html?id=ui-button--button-primary&viewMode=story"; render(); };
+  document.querySelector("#zoomIn").onclick = () => { state.zoom = Math.min(2, state.zoom + .1); render(); };
+  document.querySelector("#zoomOut").onclick = () => { state.zoom = Math.max(.5, state.zoom - .1); render(); };
+  document.querySelector("#reset").onclick = () => { Object.assign(state, structuredClone(initial)); render(); };
+  document.querySelector("#nodeZoomIn").onclick = () => { state.componentScale = Math.min(2, state.componentScale + .1); render(); };
+  document.querySelector("#nodeZoomOut").onclick = () => { state.componentScale = Math.max(.5, state.componentScale - .1); render(); };
+  document.querySelector("#nodeReset").onclick = () => { state.componentScale = 1; render(); };
+  document.querySelector("#left").onclick = () => move(-40, 0);
+  document.querySelector("#right").onclick = () => move(40, 0);
+  document.querySelector("#up").onclick = () => move(0, -40);
+  document.querySelector("#down").onclick = () => move(0, 40);
+  render();
+</script>

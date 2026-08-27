@@ -1,3 +1,5 @@
+import type { LibraryItems } from "@excalidraw/excalidraw/types";
+
 export type Tool =
   | "select"
   | "rectangle"
@@ -36,6 +38,37 @@ export type Candidate = {
   previewPath?: string;
   sourceCachePath?: string;
   sourceSandboxPath?: string;
+  sourceId?: string;
+  storyId?: string;
+  storyName?: string;
+  storyTitle?: string;
+  storyUrl?: string;
+};
+
+export type StorybookSource = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  indexUrl: string;
+  allowedOrigin: string;
+  status?: "ready" | "unavailable" | "loading";
+  storyCount?: number;
+  checkedAt?: string;
+  error?: string;
+};
+
+export type StorybookStory = {
+  id: string;
+  title: string;
+  name: string;
+  type: "story" | "docs";
+  sourceId: string;
+  storyUrl: string;
+};
+
+export type StorybookCatalog = {
+  source: StorybookSource;
+  stories: StorybookStory[];
 };
 
 export type ComponentSearchResult = {
@@ -63,6 +96,15 @@ export type ComponentInstance = Candidate & {
   instanceId: string;
   elementId: string;
   status: "confirmed";
+  sourceType?: "image" | "storybook";
+  boundsSource?: "image" | "electron-web-frame-main" | "fallback";
+  intrinsicWidth?: number;
+  intrinsicHeight?: number;
+  rotation?: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 };
 
 export type GlobalComponent = Candidate & {
@@ -110,9 +152,12 @@ export type Workspace = {
   updatedAt: string;
   currentArtworkId: string | null;
   artworks: Artwork[];
+  libraryItems: LibraryItems;
   globalComponents: GlobalComponent[];
   recentProjects: ProjectRef[];
   preferredLibraries: string[];
+  storybookSources?: StorybookSource[];
+  storybookSelection?: { sourceId: string; storyId: string; storyName?: string; storyUrl?: string };
   windowState: {
     bar?: { x: number; y: number };
     annotator?: { x: number; y: number };

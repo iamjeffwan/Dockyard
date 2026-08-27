@@ -9,7 +9,9 @@ import { createRoot } from "react-dom/client";
 import {
   Excalidraw,
   MainMenu,
+  Sidebar,
   convertToExcalidrawElements,
+  useHandleLibrary,
 } from "@excalidraw/excalidraw";
 import {
   Box,
@@ -30,6 +32,10 @@ import {
   X,
 } from "lucide-react";
 import type {
+  ExcalidrawImperativeAPI,
+  LibraryItems,
+} from "@excalidraw/excalidraw/types";
+import type {
   Artwork,
   CacheStatus,
   Candidate,
@@ -39,7 +45,14 @@ import type {
   SceneData,
   SourceAsset,
   Workspace,
+  StorybookCatalog,
+  StorybookSource,
+  StorybookStory,
 } from "./types";
+import {
+  EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
+  excalidrawLibraryReturnUrl,
+} from "./excalidraw-library-host";
 import "@excalidraw/excalidraw/index.css";
 import "./styles.css";
 import projectTokenData from "../design/project-tokens.json";
@@ -62,6 +75,7 @@ const emptyWorkspace: Workspace = {
   updatedAt: now(),
   currentArtworkId: null,
   artworks: [],
+  libraryItems: [],
   globalComponents: [],
   recentProjects: [],
   preferredLibraries: ["shadcn/ui"],
@@ -196,6 +210,7 @@ function useWorkspace() {
         if (
           record ||
           next.artworks.length !== current.artworks.length ||
+          next.libraryItems !== current.libraryItems ||
           next.recentProjects !== current.recentProjects
         )
           void window.dockyard?.saveWorkspace({ ...next, updatedAt: now() });
@@ -261,6 +276,108 @@ function WindowHeader({
     </header>
   );
 }
+
+function StorybookSidebar({
+  selection,
+  onSelectionChange,
+  onStoryDragStart,
+}: {
+  selection?: Workspace["storybookSelection"];
+  onSelectionChange: (story: StorybookStory) => void;
+  onStoryDragStart?: (event: React.DragEvent<HTMLButtonElement>, story: StorybookStory) => void;
+}) {
+  const [sources, setSources] = useState<StorybookSource[]>([]);
+  const [sourceId, setSourceId] = useState(selection?.sourceId || "");
+  const [catalog, setCatalog] = useState<StorybookCatalog | null>(null);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("正在读取来源…");
+  useEffect(() => {
+    const request = window.dockyard?.storybookSources();
+    if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
+    void request.then((items) => {
+      setSources(items || []);
+      const next = selection?.sourceId || items?.[0]?.id || "";
+      setSourceId(next);
+    }).catch(() => setStatus("来源读取失败"));
+  }, [selection?.sourceId]);
+  useEffect(() => {
+    if (!sourceId) return;
+    setStatus("正在读取组件目录…");
+    setCatalog(null);
+    const request = window.dockyard?.storybookCatalog(sourceId);
+    if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
+    void request.then((next) => {
+      setCatalog(next);
+      setStatus(`${next.stories.length} 个故事`);
+    }).catch(() => setStatus("目录读取失败"));
+  }, [sourceId]);
+  const groups = useMemo(() => {
+    const map = new Map<string, StorybookStory[]>();
+    for (const story of catalog?.stories || []) {
+      if (!story.title.toLowerCase().includes(query.toLowerCase()) && !story.name.toLowerCase().includes(query.toLowerCase())) continue;
+      const stories = map.get(story.title) || [];
+      stories.push(story);
+      map.set(story.title, stories);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [catalog, query]);
+  return (
+    <Sidebar name="dockyard-storybook" docked={false}>
+      <Sidebar.Tabs>
+        <Sidebar.Tab tab="stories">
+          <Sidebar.Header>
+            <div className="storybook-panel-heading"><span className="storybook-mark">S</span><strong>组件 Stories</strong></div>
+            <select aria-label="组件来源" value={sourceId} onChange={(event) => setSourceId(event.target.value)}>
+              {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
+            </select>
+          </Sidebar.Header>
+          <div className="storybook-panel-body">
+            <label className="storybook-search"><Search size={13} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="查找组件或故事" /></label>
+            <small className="storybook-status">{status}</small>
+            <div className="storybook-groups">
+              {groups.map(([title, stories]) => <section key={title} className="storybook-group">
+                <h3>{title}</h3>
+                {stories.map((story) => <button key={story.id} type="button" draggable onClick={() => onSelectionChange(story)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "copy"; event.dataTransfer.setData("application/x-dockyard-story", JSON.stringify(story)); onStoryDragStart?.(event, story); }} className={selection?.storyId === story.id ? "selected" : ""}><span className="story-icon">▱</span>{story.name}</button>)}
+              </section>)}
+              {!groups.length && <p className="storybook-empty">没有匹配的故事</p>}
+            </div>
+            {selection?.storyUrl && <div className="storybook-preview"><span>当前故事预览</span><iframe title={selection.storyName || selection.storyId} src={selection.storyUrl} /></div>}
+          </div>
+        </Sidebar.Tab>
+      </Sidebar.Tabs>
+    </Sidebar>
+  );
+}
+
+function RemoteStoryOverlayLayer({
+  components,
+  appState,
+  onChange,
+}: {
+  components: ComponentInstance[];
+  appState?: any;
+  onChange: (instanceId: string, patch: Partial<ComponentInstance>) => void;
+}) {
+  const [altPressed, setAltPressed] = useState(false);
+  const drag = useRef<{ id: string; x: number; y: number; width: number; height: number; rotation: number; startX: number; startY: number; mode: "move" | "resize" | "rotate"; corner?: string } | null>(null);
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => event.key === "Alt" && setAltPressed(true);
+    const up = (event: KeyboardEvent) => event.key === "Alt" && setAltPressed(false);
+    window.addEventListener("keydown", down); window.addEventListener("keyup", up);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+  }, []);
+  const scrollX = Number(appState?.scrollX || 0);
+  const scrollY = Number(appState?.scrollY || 0);
+  const zoom = Number((appState?.zoom as any)?.value || appState?.zoom || 1);
+  const stories = components.filter((item) => item.sourceType === "storybook" && item.storyUrl);
+  if (!stories.length) return null;
+  return <div className={`storybook-overlay-layer${altPressed ? " alt-active" : ""}`}>
+    {stories.map((item) => <div key={item.instanceId} className="storybook-overlay-item" style={{ left: `${((item.x || 0) + scrollX) * zoom}px`, top: `${((item.y || 0) + scrollY) * zoom}px`, width: `${(item.width || 320) * zoom}px`, height: `${(item.height || 160) * zoom}px`, transform: `rotate(${item.rotation || 0}rad)` }} onPointerDown={(event) => { if (!altPressed) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "move" }; }} onPointerMove={(event) => { const active = drag.current; if (!active || active.id !== item.instanceId) return; const dx = (event.clientX - active.startX) / zoom; const dy = (event.clientY - active.startY) / zoom; if (active.mode === "move") onChange(item.instanceId, { x: active.x + dx, y: active.y + dy }); else if (active.mode === "resize") { const signX = active.corner?.includes("w") ? -1 : 1; const signY = active.corner?.includes("n") ? -1 : 1; onChange(item.instanceId, { width: Math.max(40, active.width + signX * dx), height: Math.max(32, active.height + signY * dy) }); } else { const centerX = ((active.x + active.width / 2 + scrollX) * zoom); const centerY = ((active.y + active.height / 2 + scrollY) * zoom); const angle = Math.atan2(event.clientY - centerY, event.clientX - centerX) + Math.PI / 2; onChange(item.instanceId, { rotation: event.shiftKey ? Math.round(angle / (Math.PI / 12)) * (Math.PI / 12) : angle }); } }} onPointerUp={() => { drag.current = null; }}>
+      <iframe title={item.storyName || item.storyId || item.name} src={item.storyUrl} onLoad={() => { const request = window.dockyard?.storybookMeasureFrame(item.storyUrl!); if (!request) return; void request.then((measurement) => { onChange(item.instanceId, { width: measurement.width, height: measurement.height, intrinsicWidth: measurement.width, intrinsicHeight: measurement.height, boundsSource: "electron-web-frame-main" }); }).catch(() => { /* 固定安全边界作为回退 */ }); }} />
+      {altPressed && <><span className="storybook-overlay-rotate" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "rotate" }; }} /><span className="storybook-overlay-handle nw" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "nw" }; }} /><span className="storybook-overlay-handle ne" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "ne" }; }} /><span className="storybook-overlay-handle sw" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "sw" }; }} /><span className="storybook-overlay-handle se" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "se" }; }} /></>}
+    </div>)}
+  </div>;
+}
 function importArtwork(
   file: File | undefined,
   workspace: Workspace,
@@ -303,7 +420,7 @@ function BarView() {
       <div className="bar-drag-handle" aria-hidden="true" />
       <button
         className="bar-context active"
-        onClick={() => artwork && openPanel("annotator")}
+        onClick={() => openPanel("annotator")}
       >
         <Pencil size={17} />
         <span>图稿</span>
@@ -419,23 +536,35 @@ function CanvasMainMenu({
 
 function SceneCanvas({
   artwork,
+  libraryItems,
+  storybookSelection,
+  onStorySelection,
+  onStoryDragStart,
   updateArtwork,
+  onLibraryChange,
   onCreateArtwork,
   onDropCandidate,
+  onDropStory,
   onChooseArtwork,
   onSave,
   onSendContext,
 }: {
   artwork: Artwork | null;
+  libraryItems: LibraryItems;
+  storybookSelection?: Workspace["storybookSelection"];
+  onStorySelection: (story: StorybookStory) => void;
+  onStoryDragStart?: (event: React.DragEvent<HTMLButtonElement>, story: StorybookStory) => void;
   updateArtwork: (
     producer: (item: Artwork) => Artwork,
     record?: boolean,
   ) => void;
+  onLibraryChange: (items: LibraryItems) => void;
   onCreateArtwork: (source: SourceAsset, scene: SceneData) => void;
   onDropCandidate: (
     candidate: Candidate,
     event: React.DragEvent<HTMLDivElement>,
   ) => void;
+  onDropStory: (story: StorybookStory, event: React.DragEvent<HTMLDivElement>) => void;
   onChooseArtwork: () => void;
   onSave: () => void;
   onSendContext: () => void;
@@ -447,8 +576,14 @@ function SceneCanvas({
   );
   const last = useRef(JSON.stringify(scene));
   const nativeImageSources = useRef(new Map<string, SourceAsset>());
+  const [excalidrawAPI, setExcalidrawAPI] =
+    useState<ExcalidrawImperativeAPI | null>(null);
+  const [canvasAppState, setCanvasAppState] = useState<any>(scene.appState);
+  useHandleLibrary({ excalidrawAPI });
+  const libraryReturnUrl = useMemo(() => excalidrawLibraryReturnUrl(), []);
   useEffect(() => {
     last.current = JSON.stringify(scene);
+    setCanvasAppState(scene.appState);
   }, [scene]);
   const generateIdForFile = async (file: File) => {
     const source = await readImage(file);
@@ -458,7 +593,23 @@ function SceneCanvas({
   return (
     <div
       className="excalidraw-wrap"
+      data-library-return-url={libraryReturnUrl}
+      data-library-target={EXCALIDRAW_ANNOTATOR_WINDOW_NAME}
+      data-library-token={excalidrawAPI?.id || ""}
+      onDragOverCapture={(event) => {
+        if (event.dataTransfer.types.includes("application/x-dockyard-story") || event.dataTransfer.types.includes("application/x-dockyard-candidate")) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }
+      }}
       onDropCapture={(event) => {
+        const storyRaw = event.dataTransfer.getData("application/x-dockyard-story");
+        if (storyRaw) {
+          event.preventDefault();
+          event.stopPropagation();
+          onDropStory(JSON.parse(storyRaw), event);
+          return;
+        }
         const raw = event.dataTransfer.getData(
           "application/x-dockyard-candidate",
         );
@@ -471,9 +622,14 @@ function SceneCanvas({
       <div className="excalidraw-grid" />
       <Excalidraw
         key={artwork?.id || "dockyard-empty-canvas"}
-        initialData={scene as any}
+        initialData={{ ...scene, libraryItems } as any}
+        excalidrawAPI={setExcalidrawAPI}
+        renderTopRightUI={() => <Sidebar.Trigger name="dockyard-storybook" tab="stories" title="打开组件 Stories">组件 Stories</Sidebar.Trigger>}
+        libraryReturnUrl={libraryReturnUrl}
+        onLibraryChange={onLibraryChange}
         generateIdForFile={generateIdForFile}
         onChange={(elements, appState, files) => {
+          setCanvasAppState(appState);
           const next: SceneData = {
             ...scene,
             elements: [...elements],
@@ -534,6 +690,7 @@ function SceneCanvas({
           },
         }}
       >
+        <StorybookSidebar selection={storybookSelection} onSelectionChange={onStorySelection} onStoryDragStart={onStoryDragStart} />
         <CanvasMainMenu
           hasArtwork={Boolean(artwork)}
           onChooseArtwork={onChooseArtwork}
@@ -541,6 +698,7 @@ function SceneCanvas({
           onSendContext={onSendContext}
         />
       </Excalidraw>
+      <RemoteStoryOverlayLayer components={artwork?.components || []} appState={canvasAppState} onChange={(instanceId, patch) => updateArtwork((current) => ({ ...current, components: current.components.map((item) => item.instanceId === instanceId ? { ...item, ...patch } : item), updatedAt: now() }))} />
       {!artwork && (
         <div className="canvas-empty-callout" aria-hidden="true">
           <ImagePlus size={26} />
@@ -595,7 +753,7 @@ function AnnotatorView() {
     const canvas = document.querySelector(
       ".excalidraw-wrap canvas",
     ) as HTMLCanvasElement | null;
-    const preview = canvas?.toDataURL("image/png");
+    const preview = (await window.dockyard?.captureViewport()) || canvas?.toDataURL("image/png");
     const next =
       preview
         ? {
@@ -744,6 +902,39 @@ function AnnotatorView() {
     }));
     setStatus(`${candidate.name} 已加入画稿`);
   };
+  const dropStory = (story: StorybookStory, event: React.DragEvent<HTMLDivElement>) => {
+    if (!artwork) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const appState = artwork.scene.appState || {};
+    const zoom = Number((appState.zoom as any)?.value || appState.zoom || 1);
+    const scrollX = Number(appState.scrollX || 0);
+    const scrollY = Number(appState.scrollY || 0);
+    const instance: ComponentInstance = {
+      id: story.id,
+      name: story.name,
+      library: story.sourceId,
+      previewKind: "reference",
+      description: story.title,
+      docsUrl: story.storyUrl,
+      instanceId: uid("component"),
+      elementId: "",
+      status: "confirmed",
+      sourceType: "storybook",
+      sourceId: story.sourceId,
+      storyId: story.id,
+      storyName: story.name,
+      storyTitle: story.title,
+      storyUrl: story.storyUrl,
+      boundsSource: "fallback",
+      x: (event.clientX - rect.left) / zoom - scrollX - 160,
+      y: (event.clientY - rect.top) / zoom - scrollY - 80,
+      width: 320,
+      height: 160,
+      rotation: 0,
+    };
+    updateArtwork((current) => ({ ...current, components: [...current.components, instance], updatedAt: now() }));
+    setStatus(`${story.title} / ${story.name} 已加入画稿`);
+  };
   const importInputRef = useRef<HTMLInputElement>(null);
   const requestArtworkImport = () => importInputRef.current?.click();
   return (
@@ -762,9 +953,22 @@ function AnnotatorView() {
         />
         <SceneCanvas
           artwork={artwork}
+          libraryItems={workspace.libraryItems || []}
+          storybookSelection={workspace.storybookSelection}
+          onStorySelection={(story) => update((current) => ({
+            ...current,
+            storybookSelection: { sourceId: story.sourceId, storyId: story.id, storyName: story.name, storyUrl: story.storyUrl },
+          }))}
           updateArtwork={updateArtwork}
+          onLibraryChange={(items) =>
+            update(
+              (current) => ({ ...current, libraryItems: items }),
+              false,
+            )
+          }
           onCreateArtwork={createArtworkFromNativeImage}
           onDropCandidate={dropCandidate}
+          onDropStory={dropStory}
           onChooseArtwork={() => setArtworkPickerOpen(true)}
           onSave={() => void saveNow()}
           onSendContext={openContextDialog}
@@ -1264,6 +1468,7 @@ function DecisionsView() {
 }
 function App() {
   const view = new URLSearchParams(window.location.search).get("view") || "bar";
+  if (view === "annotator") window.name = EXCALIDRAW_ANNOTATOR_WINDOW_NAME;
   document.body.dataset.view = view;
   document.title =
     view === "annotator"
