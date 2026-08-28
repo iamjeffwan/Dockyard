@@ -261,8 +261,6 @@ function loadWorkspace() {
   atomicJson(indexPath(), {
     ...index,
     version: 2,
-    currentWorkspaceId: undefined,
-    currentProjectPath: undefined,
     lastOpenedAt: now(),
   });
   return loaded;
@@ -351,12 +349,22 @@ function saveWorkspace(next: any) {
 }
 function projectStatus() {
   const index = readJson<any>(indexPath()) || {};
-  const recent = Array.isArray(index.recentProjects) ? index.recentProjects : [];
+  const recent = (Array.isArray(index.recentProjects) ? index.recentProjects : []).map(
+    (item: any) => ({ ...item, available: validProjectPath(item.path) }),
+  );
   const current = validProjectPath(currentProjectPath)
     ? projectRef(currentProjectPath, recent)
     : null;
+  const missingCurrent =
+    !current && typeof index.currentProjectPath === "string"
+      ? {
+          ...projectRef(index.currentProjectPath, recent, index.currentWorkspaceId),
+          available: false,
+        }
+      : null;
   return {
     current,
+    missingCurrent,
     recent,
     hasWorkspace: Boolean(current && existsSync(projectWorkspacePath(current.path))),
   };
@@ -430,6 +438,34 @@ function createProjectWorkspace(projectPath: string) {
       error: error instanceof Error ? error.message : "工作区创建失败",
     };
   }
+}
+function relinkProject(previousPath: string, projectPath: string) {
+  if (!validProjectPath(projectPath))
+    return { ok: false, error: "新项目目录不存在或不可访问" };
+  const targetPath = resolve(projectPath);
+  const saved = readJson<any>(projectWorkspacePath(targetPath));
+  const metadata = readJson<any>(projectMetadataPath(targetPath));
+  if (!saved || !metadata)
+    return { ok: false, error: "所选目录没有完整的 Dockyard 工作区" };
+  const index = readJson<any>(indexPath()) || {};
+  const previous = (index.recentProjects || []).find(
+    (item: any) => item.path === previousPath,
+  );
+  const expectedId = previous?.workspaceId ||
+    (index.currentProjectPath === previousPath ? index.currentWorkspaceId : undefined);
+  if (!expectedId)
+    return { ok: false, error: "缺少原工作区标识，不能安全地重新定位" };
+  if (saved.id !== expectedId || metadata.id !== expectedId)
+    return { ok: false, error: "所选目录不是原来的项目工作区" };
+  atomicJson(indexPath(), {
+    ...index,
+    currentProjectPath: targetPath,
+    currentWorkspaceId: expectedId,
+    recentProjects: (index.recentProjects || []).filter(
+      (item: any) => item.path !== previousPath && item.path !== targetPath,
+    ),
+  });
+  return openProject(targetPath);
 }
 function currentArtwork() {
   return (
@@ -1251,6 +1287,11 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("project:status", () => projectStatus());
   ipcMain.handle("project:open", (_event, path: string) => openProject(path));
+  ipcMain.handle(
+    "project:relink",
+    (_event, previousPath: string, path: string) =>
+      relinkProject(previousPath, path),
+  );
   ipcMain.handle("project:create-workspace", (_event, path: string) =>
     createProjectWorkspace(path),
   );

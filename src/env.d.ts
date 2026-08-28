@@ -35,6 +35,10 @@ declare global {
         needsCreation?: boolean;
         error?: string;
       }>;
+      relinkProject: (previousPath: string, path: string) => Promise<{
+        ok: boolean;
+        error?: string;
+      }>;
       createProjectWorkspace: (path: string) => Promise<{
         ok: boolean;
         error?: string;

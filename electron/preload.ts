@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("dockyard", {
   pickProject: () => ipcRenderer.invoke("project:pick"),
   projectStatus: () => ipcRenderer.invoke("project:status"),
   openProject: (path: string) => ipcRenderer.invoke("project:open", path),
+  relinkProject: (previousPath: string, path: string) =>
+    ipcRenderer.invoke("project:relink", previousPath, path),
   createProjectWorkspace: (path: string) =>
     ipcRenderer.invoke("project:create-workspace", path),
   openContext: (path: string) => ipcRenderer.invoke("context:open", path),

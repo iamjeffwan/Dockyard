@@ -144,10 +144,17 @@ export type Artwork = {
   lastProjectPath?: string;
 };
 
-export type ProjectRef = { path: string; name: string; lastUsedAt: string };
+export type ProjectRef = {
+  path: string;
+  name: string;
+  lastUsedAt: string;
+  workspaceId?: string;
+  available?: boolean;
+};
 
 export type ProjectStatus = {
   current: ProjectRef | null;
+  missingCurrent: ProjectRef | null;
   recent: ProjectRef[];
   hasWorkspace: boolean;
 };

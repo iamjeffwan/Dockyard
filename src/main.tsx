@@ -254,6 +254,7 @@ function useWorkspace() {
 function useProjectStatus() {
   const [status, setStatus] = useState<import("./types").ProjectStatus>({
     current: null,
+    missingCurrent: null,
     recent: [],
     hasWorkspace: false,
   });
@@ -422,9 +423,7 @@ function BarView() {
   const { workspace, update } = useWorkspace();
   const { status: projectStatus, refresh: refreshProjectStatus } = useProjectStatus();
   const artwork = activeArtwork(workspace);
-  const chooseProject = async () => {
-    const selected = await window.dockyard?.pickProject?.();
-    if (!selected) return;
+  const activateProject = async (selected: { path: string; name: string }) => {
     const opened = await window.dockyard?.openProject?.(selected.path);
     if (!opened?.ok) {
       window.alert(opened?.error || "项目打开失败");
@@ -440,6 +439,29 @@ function BarView() {
     }
     await refreshProjectStatus();
   };
+  const chooseProject = async () => {
+    const selected = await window.dockyard?.pickProject?.();
+    if (!selected) return;
+    if (projectStatus.missingCurrent) {
+      const relinked = await window.dockyard?.relinkProject?.(
+        projectStatus.missingCurrent.path,
+        selected.path,
+      );
+      if (!relinked?.ok) {
+        window.alert(relinked?.error || "项目重新定位失败");
+        return;
+      }
+      await refreshProjectStatus();
+      return;
+    }
+    await activateProject(selected);
+  };
+  const chooseRecentProject = async (path: string) => {
+    if (path === "__browse__") return chooseProject();
+    const selected = projectStatus.recent.find((item) => item.path === path);
+    if (!selected) return;
+    await activateProject(selected);
+  };
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) =>
       importArtwork(
@@ -454,15 +476,31 @@ function BarView() {
   return (
     <div className="bar-shell">
       <div className="bar-drag-handle" aria-hidden="true" />
-      <button
+      <select
         className="bar-project"
-        type="button"
-        title={projectStatus.current?.path || "选择代码项目"}
-        onClick={() => void chooseProject()}
+        aria-label="当前代码项目"
+        title={
+          projectStatus.current?.path ||
+          projectStatus.missingCurrent?.path ||
+          "选择代码项目"
+        }
+        value={projectStatus.current?.path || ""}
+        onChange={(event) => void chooseRecentProject(event.target.value)}
       >
-        <FolderOpen size={16} />
-        <span>{projectStatus.current?.name || "选择项目"}</span>
-      </button>
+        <option value="">
+          {projectStatus.missingCurrent ? "项目位置失效" : "选择项目"}
+        </option>
+        {projectStatus.recent
+          .filter((item) => item.available)
+          .map((item) => (
+            <option key={item.path} value={item.path}>
+              {item.name}
+            </option>
+          ))}
+        <option value="__browse__">
+          {projectStatus.missingCurrent ? "重新定位项目…" : "选择其他项目…"}
+        </option>
+      </select>
       <button
         className="bar-context active"
         onClick={() => openPanel("annotator")}
