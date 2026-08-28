@@ -13,7 +13,7 @@ declare global {
     dockyard?: {
       saveWorkspace: (
         workspace: Workspace,
-      ) => Promise<{ ok: boolean; path: string }>;
+      ) => Promise<{ ok: boolean; path?: string; error?: string }>;
       loadWorkspace: () => Promise<Workspace | null>;
       runCodexSearch: (payload: unknown) => Promise<ComponentSearchResult>;
       onCodexTrace: (listener: (trace: CodexTraceEvent) => void) => () => void;

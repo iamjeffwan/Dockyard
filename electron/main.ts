@@ -91,6 +91,9 @@ function projectRoot(projectPath: string) {
 function projectWorkspacePath(projectPath: string) {
   return join(projectRoot(projectPath), "design.json");
 }
+function projectMetadataPath(projectPath: string) {
+  return join(projectRoot(projectPath), "workspace.json");
+}
 function validProjectPath(projectPath: unknown): projectPath is string {
   if (typeof projectPath !== "string" || !isAbsolute(projectPath)) return false;
   try {
@@ -99,16 +102,21 @@ function validProjectPath(projectPath: unknown): projectPath is string {
     return false;
   }
 }
-function projectRef(projectPath: string, recent: any[] = []) {
+function projectRef(projectPath: string, recent: any[] = [], workspaceId?: string) {
   const existing = recent.find((item) => item.path === projectPath);
   return {
     path: projectPath,
     name: basename(projectPath),
     lastUsedAt: existing?.lastUsedAt || now(),
+    workspaceId: workspaceId || existing?.workspaceId,
   };
 }
-function updateProjectIndex(projectPath: string, recent: any[] = []) {
-  const next = projectRef(projectPath, recent);
+function updateProjectIndex(
+  projectPath: string,
+  recent: any[] = [],
+  workspaceId?: string,
+) {
+  const next = projectRef(projectPath, recent, workspaceId);
   const projects = [
     next,
     ...recent.filter((item) => item.path !== projectPath),
@@ -118,6 +126,7 @@ function updateProjectIndex(projectPath: string, recent: any[] = []) {
     ...index,
     version: 2,
     currentProjectPath: projectPath,
+    currentWorkspaceId: workspaceId || index.currentWorkspaceId,
     recentProjects: projects,
     lastOpenedAt: now(),
   });
@@ -241,7 +250,7 @@ function loadWorkspace() {
     if (projectSaved) {
       workspace = hydrateWorkspace(projectSaved, ensureProjectDirs(currentProjectPath));
       workspace.recentProjects = recentProjects;
-      updateProjectIndex(currentProjectPath, recentProjects);
+      updateProjectIndex(currentProjectPath, recentProjects, workspace.id);
       return workspace;
     }
     currentProjectPath = null;
@@ -304,6 +313,12 @@ function saveWorkspace(next: any) {
       delete component.previewDataUrl;
   }
   atomicJson(join(root, "design.json"), persisted);
+  atomicJson(projectMetadataPath(currentProjectPath), {
+    version: 1,
+    id: next.id,
+    name: next.name,
+    updatedAt: next.updatedAt || now(),
+  });
   const globalComponents = (next.globalComponents || []).map((item: any) => {
     const copy = { ...item };
     if (copy.previewDataUrl) {
@@ -349,25 +364,72 @@ function projectStatus() {
 function openProject(projectPath: string) {
   if (!validProjectPath(projectPath))
     return { ok: false, error: "项目目录不存在或不可访问" };
-  const saved = readJson<any>(projectWorkspacePath(projectPath));
-  if (!saved) return { ok: true, needsCreation: true };
-  currentProjectPath = resolve(projectPath);
-  workspace = hydrateWorkspace(saved, ensureProjectDirs(currentProjectPath));
-  const index = readJson<any>(indexPath()) || {};
-  workspace.recentProjects = updateProjectIndex(currentProjectPath, index.recentProjects || []);
-  broadcast();
-  return { ok: true, needsCreation: false };
+  const targetPath = resolve(projectPath);
+  const designPath = projectWorkspacePath(targetPath);
+  if (!existsSync(designPath)) return { ok: true, needsCreation: true };
+  const saved = readJson<any>(designPath);
+  if (!saved)
+    return { ok: false, error: `工作区文件无法读取：${designPath}` };
+  try {
+    if (currentProjectPath && currentProjectPath !== targetPath && workspace) {
+      const currentSaved = saveWorkspace({ ...workspace, updatedAt: now() });
+      if (!currentSaved.ok) return currentSaved;
+    }
+    currentProjectPath = targetPath;
+    workspace = hydrateWorkspace(saved, ensureProjectDirs(currentProjectPath));
+    const index = readJson<any>(indexPath()) || {};
+    workspace.recentProjects = updateProjectIndex(
+      currentProjectPath,
+      index.recentProjects || [],
+      workspace.id,
+    );
+    if (!existsSync(projectMetadataPath(currentProjectPath)))
+      atomicJson(projectMetadataPath(currentProjectPath), {
+        version: 1,
+        id: workspace.id,
+        name: workspace.name,
+        updatedAt: workspace.updatedAt || now(),
+      });
+    broadcast();
+    return { ok: true, needsCreation: false };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "项目切换失败",
+    };
+  }
 }
 function createProjectWorkspace(projectPath: string) {
   if (!validProjectPath(projectPath))
     return { ok: false, error: "项目目录不存在或不可访问" };
-  currentProjectPath = resolve(projectPath);
-  const index = readJson<any>(indexPath()) || {};
-  const next: any = defaultWorkspace();
-  next.recentProjects = updateProjectIndex(currentProjectPath, index.recentProjects || []);
-  saveWorkspace(next);
-  broadcast();
-  return { ok: true };
+  const targetPath = resolve(projectPath);
+  const designPath = projectWorkspacePath(targetPath);
+  if (existsSync(designPath))
+    return { ok: false, error: `目标项目已有工作区：${designPath}` };
+  try {
+    if (currentProjectPath && currentProjectPath !== targetPath && workspace) {
+      const currentSaved = saveWorkspace({ ...workspace, updatedAt: now() });
+      if (!currentSaved.ok) return currentSaved;
+    }
+    currentProjectPath = targetPath;
+    const index = readJson<any>(indexPath()) || {};
+    const next: any = defaultWorkspace();
+    next.name = basename(currentProjectPath);
+    next.recentProjects = updateProjectIndex(
+      currentProjectPath,
+      index.recentProjects || [],
+      next.id,
+    );
+    const saved = saveWorkspace(next);
+    if (!saved.ok) return saved;
+    broadcast();
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "工作区创建失败",
+    };
+  }
 }
 function currentArtwork() {
   return (
@@ -1138,9 +1200,16 @@ app.whenReady().then(() => {
   workspace = loadWorkspace();
   startMcpServer();
   ipcMain.handle("workspace:save", (_event, next: any) => {
-    const result = saveWorkspace({ ...next, updatedAt: now() });
-    broadcast();
-    return result;
+    try {
+      const result = saveWorkspace({ ...next, updatedAt: now() });
+      if (result.ok) broadcast();
+      return result;
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "工作区保存失败",
+      };
+    }
   });
   ipcMain.handle("workspace:load", () => workspace);
   ipcMain.handle("storybook:sources", () => storybookSources);

@@ -816,12 +816,12 @@ function AnnotatorView() {
       if (result?.ok) {
         setStatus("已保存到 Dockyard");
         setSaveSummary({
-          path: result.path,
+          path: result.path || "",
           artworkName: artwork.name,
           componentCount: artwork.components.length,
         });
       } else {
-        setStatus("保存失败");
+        setStatus(result?.error || "保存失败");
       }
     }
     return result;
