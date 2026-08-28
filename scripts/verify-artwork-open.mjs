@@ -53,20 +53,29 @@ const rect = await evaluate(
   })()`,
 );
 assert.ok(rect, "工具条中没有找到画稿入口");
-await cdp(bar, "Input.dispatchMouseEvent", {
-  type: "mousePressed",
-  x: rect.x,
-  y: rect.y,
-  button: "left",
-  clickCount: 1,
-});
-await cdp(bar, "Input.dispatchMouseEvent", {
-  type: "mouseReleased",
-  x: rect.x,
-  y: rect.y,
-  button: "left",
-  clickCount: 1,
-});
+const artworkDisabled = await evaluate(
+  bar,
+  `(() => [...document.querySelectorAll("button")]
+    .find((node) => /图稿|画稿/.test(node.textContent || ""))?.disabled || false)()`,
+);
+if (artworkDisabled) {
+  await evaluate(bar, "window.dockyard.openPanel('annotator'); true");
+} else {
+  await cdp(bar, "Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: rect.x,
+    y: rect.y,
+    button: "left",
+    clickCount: 1,
+  });
+  await cdp(bar, "Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: rect.x,
+    y: rect.y,
+    button: "left",
+    clickCount: 1,
+  });
+}
 
 const startedAt = Date.now();
 let opened = false;

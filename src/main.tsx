@@ -463,16 +463,18 @@ function BarView() {
     await activateProject(selected);
   };
   useEffect(() => {
-    const onPaste = (event: ClipboardEvent) =>
+    const onPaste = (event: ClipboardEvent) => {
+      if (!projectStatus.current) return;
       importArtwork(
         Array.from(event.clipboardData?.files || [])[0],
         workspace,
         update,
         true,
       );
+    };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [workspace, update]);
+  }, [projectStatus.current, workspace, update]);
   return (
     <div className="bar-shell">
       <div className="bar-drag-handle" aria-hidden="true" />
@@ -508,6 +510,7 @@ function BarView() {
       </select>
       <button
         className="bar-context active"
+        disabled={!projectStatus.current}
         onClick={() => openPanel("annotator")}
       >
         <Pencil size={17} />
@@ -515,16 +518,17 @@ function BarView() {
       </button>
       <button
         className="bar-context"
+        disabled={!projectStatus.current}
         onClick={() => openPanel("component-search")}
       >
         <Box size={17} />
         <span>组件</span>
       </button>
-      <button className="bar-context" onClick={() => openPanel("tokens")}>
+      <button className="bar-context" disabled={!projectStatus.current} onClick={() => openPanel("tokens")}>
         <Palette size={17} />
         <span>Token</span>
       </button>
-      <button className="bar-context" onClick={() => openPanel("decisions")}>
+      <button className="bar-context" disabled={!projectStatus.current} onClick={() => openPanel("decisions")}>
         <FileCode2 size={17} />
         <span>决策</span>
       </button>

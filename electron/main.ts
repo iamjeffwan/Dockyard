@@ -148,6 +148,9 @@ function ensureProjectDirs(projectPath: string) {
     "context",
   ])
     mkdirSync(join(root, dir), { recursive: true });
+  const ignorePath = join(root, ".gitignore");
+  if (!existsSync(ignorePath))
+    writeFileSync(ignorePath, "# Dockyard 临时文件\n*.tmp\n", "utf8");
   return root;
 }
 function dataUrlToFile(dataUrl: string | undefined, filePath: string) {

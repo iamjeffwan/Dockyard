@@ -136,6 +136,13 @@ select:focus-visible {
   background: var(--color-surface-raised);
   color: var(--color-text-primary);
 }
+.bar-context:disabled {
+  opacity: 0.42;
+}
+.bar-context:disabled:hover {
+  color: var(--color-text-muted);
+  background: transparent;
+}
 .bar-context.active {
   color: var(--color-accent-primary);
   background: color-mix(in srgb, var(--color-accent-primary) 12%, transparent);
