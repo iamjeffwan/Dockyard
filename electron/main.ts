@@ -19,6 +19,8 @@ import {
   invokeCodexCliStructured,
   validateCodexCliConfig,
 } from "./codex-cli-model.js";
+import { classifyWindowOpen } from "./external-navigation.js";
+import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types";
 
 const execFileAsync = promisify(execFile);
 type View = "annotator" | "component-search" | "tokens" | "decisions";
@@ -50,6 +52,31 @@ const panelWindows = new Map<View, BrowserWindow>();
 const candidateCacheDays = 14;
 const shadcnNodeVersion = "22.13.1";
 const shadcnRegistry = "@shadcn";
+const storybookSources: StorybookSource[] = [
+  {
+    id: "storybook-design-system",
+    name: "Storybook Design System",
+    baseUrl: "https://master--5ccbc373887ca40020446347.chromatic.com",
+    indexUrl: "https://master--5ccbc373887ca40020446347.chromatic.com/index.json",
+    allowedOrigin: "https://master--5ccbc373887ca40020446347.chromatic.com",
+  },
+  {
+    id: "carbon-react",
+    name: "Carbon React",
+    baseUrl: "https://react.carbondesignsystem.com",
+    indexUrl: "https://react.carbondesignsystem.com/index.json",
+    allowedOrigin: "https://react.carbondesignsystem.com",
+  },
+  {
+    id: "jetbrains-ring-ui",
+    name: "JetBrains Ring UI",
+    baseUrl: "https://jetbrains.github.io/ring-ui/master",
+    indexUrl: "https://jetbrains.github.io/ring-ui/master/index.json",
+    allowedOrigin: "https://jetbrains.github.io",
+  },
+];
+const storybookCatalogCache = new Map<string, { expiresAt: number; catalog: StorybookCatalog }>();
+const storybookCacheMs = 10 * 60 * 1000;
 
 function dataRoot() {
   return workspaceDataRoot;
@@ -128,6 +155,7 @@ function defaultWorkspace() {
     updatedAt: now(),
     currentArtworkId: null,
     artworks: [],
+    libraryItems: [],
     globalComponents: [],
     recentProjects: [],
     preferredLibraries: ["shadcn/ui"],
@@ -187,6 +215,7 @@ function loadWorkspace() {
     ? readJson<any>(join(workspaceRoot(id), "design.json"))
     : null;
   const loaded = saved || legacyWorkspace() || defaultWorkspace();
+  loaded.libraryItems ||= [];
   ensureWorkspaceDirs(loaded.id);
   loaded.globalComponents = loadGlobalComponents();
   for (const artwork of loaded.artworks || []) {
@@ -353,6 +382,52 @@ function loadView(window: BrowserWindow, view: "bar" | View) {
       search: `view=${view}`,
     });
 }
+function forwardLibraryReturn(url: string) {
+  const annotator = panelWindows.get("annotator");
+  if (!annotator || annotator.isDestroyed()) return;
+  const hash = new URL(url).hash;
+  void annotator.webContents.executeJavaScript(
+    `window.location.hash = ${JSON.stringify(hash)}`,
+  );
+  annotator.show();
+  annotator.focus();
+}
+function configureWindowNavigation(window: BrowserWindow) {
+  window.webContents.on("will-navigate", (event, url) => {
+    if (classifyWindowOpen(url, rendererUrl("annotator")) !== "library-return")
+      return;
+    event.preventDefault();
+    setImmediate(() => forwardLibraryReturn(url));
+  });
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    const kind = classifyWindowOpen(url, rendererUrl("annotator"));
+    if (kind === "excalidraw-library")
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          width: 1100,
+          height: 780,
+          minWidth: 760,
+          minHeight: 560,
+          autoHideMenuBar: true,
+          backgroundColor: "#ffffff",
+          webPreferences: {
+            preload: undefined,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+          },
+        },
+      };
+    if (kind === "library-return") setImmediate(() => forwardLibraryReturn(url));
+    else if (kind === "external") void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  window.webContents.on("did-create-window", (child) => {
+    configureWindowNavigation(child);
+    if (process.platform === "win32") child.setMenuBarVisibility(false);
+  });
+}
 function broadcast() {
   for (const win of [barWindow, ...panelWindows.values()])
     if (win && !win.isDestroyed())
@@ -385,6 +460,7 @@ function createBarWindow() {
       nodeIntegration: false,
     },
   });
+  configureWindowNavigation(barWindow);
   barWindow.setAlwaysOnTop(true, "floating");
   loadView(barWindow, "bar");
   barWindow.once("ready-to-show", () => barWindow?.show());
@@ -431,6 +507,7 @@ function openPanel(view: View) {
       nodeIntegration: false,
     },
   });
+  configureWindowNavigation(panel);
   if (process.platform === "win32") panel.setMenuBarVisibility(false);
   panelWindows.set(view, panel);
   loadView(panel, view);
@@ -509,6 +586,90 @@ function download(url: string) {
       response.on("end", () => resolve(Buffer.concat(chunks)));
     }).on("error", reject),
   );
+}
+function storybookSource(sourceId: string) {
+  return storybookSources.find((source) => source.id === sourceId);
+}
+function downloadStorybook(url: string, allowedOrigin: string): Promise<Buffer> {
+  const parsed = new URL(url);
+  if (parsed.origin !== allowedOrigin) return Promise.reject(new Error("远程 Storybook 地址不在允许列表中"));
+  return new Promise((resolve, reject) => httpsGet(parsed, (response) => {
+    if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+      const next = new URL(response.headers.location, parsed).toString();
+      return downloadStorybook(next, allowedOrigin).then(resolve, reject);
+    }
+    if (response.statusCode !== 200) return reject(new Error(`远程 Storybook 请求失败（HTTP ${response.statusCode}）`));
+    const chunks: Buffer[] = [];
+    response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    response.on("end", () => resolve(Buffer.concat(chunks)));
+  }).on("error", reject));
+}
+async function loadStorybookCatalog(sourceId: string, force = false): Promise<StorybookCatalog> {
+  const source = storybookSource(sourceId);
+  if (!source) throw new Error("不允许的 Storybook 来源");
+  const cached = storybookCatalogCache.get(sourceId);
+  if (!force && cached && cached.expiresAt > Date.now()) return cached.catalog;
+  const payload = JSON.parse((await downloadStorybook(source.indexUrl, source.allowedOrigin)).toString("utf8"));
+  const entries = Object.values<any>(payload.entries || payload.stories || {});
+  const stories: StorybookStory[] = entries
+    .filter((entry) => (entry.type === "story" || !entry.type) && entry.id && entry.title)
+    .map((entry) => ({
+      id: String(entry.id),
+      title: String(entry.title),
+      name: String(entry.name || entry.id),
+      type: "story",
+      sourceId,
+      storyUrl: `${source.baseUrl}/iframe.html?id=${encodeURIComponent(String(entry.id))}&viewMode=story`,
+    }));
+  const catalog: StorybookCatalog = {
+    source: { ...source, status: "ready", storyCount: stories.length, checkedAt: now(), error: undefined },
+    stories,
+  };
+  storybookCatalogCache.set(sourceId, { expiresAt: Date.now() + storybookCacheMs, catalog });
+  return catalog;
+}
+async function checkStorybookSource(sourceId: string): Promise<StorybookSource> {
+  const source = storybookSource(sourceId);
+  if (!source) throw new Error("不允许的 Storybook 来源");
+  try {
+    const catalog = await loadStorybookCatalog(sourceId, true);
+    const first = catalog.stories[0];
+    if (first) await downloadStorybook(first.storyUrl, source.allowedOrigin);
+    return catalog.source;
+  } catch (error) {
+    return { ...source, status: "unavailable", checkedAt: now(), error: error instanceof Error ? error.message : String(error) };
+  }
+}
+function findStoryFrame(webContents: Electron.WebContents, requestedUrl: string) {
+  const requested = new URL(requestedUrl);
+  const source = storybookSources.find((item) => item.allowedOrigin === requested.origin);
+  if (!source) throw new Error("远程 Storybook 地址不在允许列表中");
+  return webContents.mainFrame.framesInSubtree.find((frame) => {
+    try {
+      const current = new URL(frame.url);
+      return current.origin === requested.origin && current.pathname === requested.pathname && current.searchParams.get("id") === requested.searchParams.get("id");
+    } catch { return false; }
+  });
+}
+async function measureStoryFrame(webContents: Electron.WebContents, requestedUrl: string) {
+  const frame = findStoryFrame(webContents, requestedUrl);
+  if (!frame) throw new Error("没有找到远程 Storybook 页面帧");
+  const result: any = await frame.executeJavaScript(`(async () => {
+    if (document.fonts?.ready) await document.fonts.ready.catch(() => {});
+    const root = document.querySelector('#storybook-root') || document.body;
+    const elements = [...root.querySelectorAll('*')].filter((element) => {
+      const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    });
+    const area = innerWidth * innerHeight;
+    const candidates = elements.filter((element) => { const rect = element.getBoundingClientRect(); return rect.width * rect.height < area * .9; });
+    const target = candidates.find((element) => ['button','input','select','textarea','a'].includes(element.tagName.toLowerCase())) || candidates[0];
+    if (!target) return null;
+    const rect = target.getBoundingClientRect(); const style = getComputedStyle(target);
+    return { width: rect.width, height: rect.height, x: rect.x, y: rect.y, viewportWidth: innerWidth, viewportHeight: innerHeight, tag: target.tagName.toLowerCase(), className: typeof target.className === 'string' ? target.className : '', boxShadow: style.boxShadow, frameUrl: location.href };
+  })()`);
+  if (!result || result.width <= 0 || result.height <= 0) throw new Error("远程页面没有返回有效组件边界");
+  return result;
 }
 async function shadcnNode() {
   const override = process.env.DOCKYARD_SHADCN_NODE;
@@ -930,6 +1091,20 @@ app.whenReady().then(() => {
     return result;
   });
   ipcMain.handle("workspace:load", () => workspace);
+  ipcMain.handle("storybook:sources", () => storybookSources);
+  ipcMain.handle("storybook:catalog", (_event, sourceId: string) =>
+    loadStorybookCatalog(sourceId),
+  );
+  ipcMain.handle("storybook:check", (_event, sourceId: string) =>
+    checkStorybookSource(sourceId),
+  );
+  ipcMain.handle("storybook:measure-frame", (event, storyUrl: string) =>
+    measureStoryFrame(event.sender, storyUrl),
+  );
+  ipcMain.handle("artwork:capture-viewport", async (event) => {
+    const image = await event.sender.capturePage();
+    return image.toDataURL();
+  });
   ipcMain.on("design:sync", (_event, next: any) => {
     workspace = next;
     broadcast();
