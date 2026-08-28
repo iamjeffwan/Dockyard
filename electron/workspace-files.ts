@@ -27,3 +27,25 @@ export function atomicWriteJson(path: string, value: unknown) {
   writeFileSync(temporaryPath, JSON.stringify(value, null, 2), "utf8");
   renameSync(temporaryPath, path);
 }
+
+export function validateWorkspaceDocuments(
+  design: unknown,
+  metadata?: unknown,
+  expectedId?: string,
+) {
+  const designRecord = design as { id?: unknown; version?: unknown } | null;
+  if (!designRecord || typeof designRecord.id !== "string" || designRecord.version !== 2)
+    throw new Error("design.json 不是有效的 Dockyard 工作区文件");
+  const metadataRecord = metadata as { id?: unknown; version?: unknown } | null;
+  if (metadata !== undefined) {
+    if (
+      !metadataRecord ||
+      metadataRecord.version !== 1 ||
+      metadataRecord.id !== designRecord.id
+    )
+      throw new Error("workspace.json 与 design.json 的工作区标识不一致");
+  }
+  if (expectedId && designRecord.id !== expectedId)
+    throw new Error("所选目录不是原来的项目工作区");
+  return designRecord.id;
+}

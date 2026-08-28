@@ -23,6 +23,7 @@ import {
   atomicWriteJson as atomicJson,
   readJsonFile as readJson,
   resolveInsideWorkspace,
+  validateWorkspaceDocuments,
 } from "./workspace-files.js";
 import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types";
 
@@ -248,6 +249,12 @@ function loadWorkspace() {
     const projectSaved = readJson<any>(projectWorkspacePath(currentProjectPath));
     if (projectSaved) {
       try {
+        const metadata = readJson<any>(projectMetadataPath(currentProjectPath));
+        validateWorkspaceDocuments(
+          projectSaved,
+          metadata || undefined,
+          index?.currentWorkspaceId,
+        );
         workspace = hydrateWorkspace(
           projectSaved,
           ensureProjectDirs(currentProjectPath),
@@ -399,6 +406,8 @@ function openProject(projectPath: string) {
   if (!saved)
     return { ok: false, error: `工作区文件无法读取：${designPath}` };
   try {
+    const metadata = readJson<any>(projectMetadataPath(targetPath));
+    validateWorkspaceDocuments(saved, metadata || undefined);
     if (currentProjectPath && currentProjectPath !== targetPath && workspace) {
       const currentSaved = saveWorkspace({ ...workspace, updatedAt: now() });
       if (!currentSaved.ok) return currentSaved;
@@ -478,8 +487,14 @@ function relinkProject(previousPath: string, projectPath: string) {
     (index.currentProjectPath === previousPath ? index.currentWorkspaceId : undefined);
   if (!expectedId)
     return { ok: false, error: "缺少原工作区标识，不能安全地重新定位" };
-  if (saved.id !== expectedId || metadata.id !== expectedId)
-    return { ok: false, error: "所选目录不是原来的项目工作区" };
+  try {
+    validateWorkspaceDocuments(saved, metadata, expectedId);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "工作区标识校验失败",
+    };
+  }
   atomicJson(indexPath(), {
     ...index,
     currentProjectPath: targetPath,
