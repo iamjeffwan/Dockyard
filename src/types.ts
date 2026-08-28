@@ -71,6 +71,20 @@ export type StorybookCatalog = {
   stories: StorybookStory[];
 };
 
+export type StorybookSearchMatch = {
+  sourceId: string;
+  path: string;
+  stories: StorybookStory[];
+  status: "matched" | "path-not-found" | "source-not-found";
+};
+
+export type StorybookSearchResult = {
+  matches: StorybookSearchMatch[];
+  source: "codex" | "cache" | "error";
+  error?: string;
+  diagnostics?: string[];
+};
+
 export type ComponentSearchResult = {
   candidates: Candidate[];
   source: "shadcn-cli" | "cache" | "error";
@@ -98,6 +112,7 @@ export type ComponentInstance = Candidate & {
   status: "confirmed";
   sourceType?: "image" | "storybook";
   boundsSource?: "image" | "electron-web-frame-main" | "fallback";
+  loadStatus?: "loading" | "ready" | "unavailable";
   intrinsicWidth?: number;
   intrinsicHeight?: number;
   rotation?: number;
@@ -143,7 +158,21 @@ export type Artwork = {
   lastProjectPath?: string;
 };
 
-export type ProjectRef = { path: string; name: string; lastUsedAt: string };
+export type ProjectRef = {
+  path: string;
+  name: string;
+  lastUsedAt: string;
+  workspaceId?: string;
+  available?: boolean;
+};
+
+export type ProjectStatus = {
+  current: ProjectRef | null;
+  missingCurrent: ProjectRef | null;
+  recent: ProjectRef[];
+  hasWorkspace: boolean;
+  error?: string;
+};
 
 export type Workspace = {
   version: 2;

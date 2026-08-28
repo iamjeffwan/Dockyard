@@ -21,29 +21,28 @@ pnpm start
 
 ## 使用流程
 
-1. 启动后显示右下角可移动横向工具条。
-2. 拖入、粘贴或选择图片，自动创建图稿。
+1. 启动后显示右下角可移动横向工具条，并选择当前代码项目。
+2. 在项目中创建或读取 `.dockyard`（项目设计目录），再拖入、粘贴或选择图片创建图稿。
 3. 打开图稿后使用 Excalidraw 原生工具栏标注和绘图。
 4. 打开组件检索，绘制临时组件草图并选择允许检索的组件库。
 5. 调用 Codex CLI，候选卡片返回后拖入画布中央。
-6. 保存图稿，或选择代码项目生成当前图稿的开发上下文包。
+6. 保存图稿，或在当前项目中生成当前图稿的开发上下文包。
 
 ## 本地数据
 
-默认保存在 Electron `userData`（应用数据目录）下：
+项目设计数据保存在当前代码项目中：
 
 ```text
-index.json
-workspaces/<workspace-id>/design.json
-workspaces/<workspace-id>/artworks/<artwork-id>/scene.excalidraw.json
-workspaces/<workspace-id>/assets/source/
-workspaces/<workspace-id>/assets/previews/
-workspaces/<workspace-id>/assets/components/
-global-components/index.json
-global-components/<component-id>/
+.dockyard/workspace.json
+.dockyard/design.json
+.dockyard/artworks/<artwork-id>/scene.excalidraw.json
+.dockyard/assets/source/
+.dockyard/assets/previews/
+.dockyard/assets/components/
+.dockyard/context/
 ```
 
-场景文件只保存结构和文件引用，图片及预览图单独保存。文件由 Electron 主进程通过 `IPC`（进程间通信）写入，并使用临时文件替换方式保存。
+应用数据目录只保存当前项目、最近项目、窗口状态、组件缓存和全局组件资源。旧全局工作区不再读取或写入。场景文件只保存结构和相对文件引用，图片及预览图单独保存。文件由 Electron 主进程通过 `IPC`（进程间通信）写入，并使用临时文件替换方式保存。
 
 ## Codex CLI 与上下文包
 
@@ -67,7 +66,7 @@ global-components/<component-id>/
 
 第三方供应商必须兼容 `Responses API`。远程地址必须使用 `HTTPS`，只有本机地址允许使用 `HTTP`。
 
-“发送给开发助手”会让用户选择目标代码项目，并在项目下生成：
+“发送给开发助手”会在当前代码项目下生成：
 
 ```text
 .dockyard/context/<artwork-id>/<timestamp>/

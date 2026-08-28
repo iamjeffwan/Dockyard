@@ -3,7 +3,9 @@ import type {
   CodexTraceEvent,
   ComponentSearchResult,
   StorybookCatalog,
+  StorybookSearchResult,
   StorybookSource,
+  ProjectStatus,
   Workspace,
 } from "./types";
 
@@ -12,9 +14,10 @@ declare global {
     dockyard?: {
       saveWorkspace: (
         workspace: Workspace,
-      ) => Promise<{ ok: boolean; path: string }>;
+      ) => Promise<{ ok: boolean; path?: string; error?: string }>;
       loadWorkspace: () => Promise<Workspace | null>;
       runCodexSearch: (payload: unknown) => Promise<ComponentSearchResult>;
+      runStorybookSearch: (payload: unknown) => Promise<StorybookSearchResult>;
       onCodexTrace: (listener: (trace: CodexTraceEvent) => void) => () => void;
       openCodexLogs: () => Promise<string>;
       componentCacheStatus: () => Promise<CacheStatus>;
@@ -28,6 +31,20 @@ declare global {
         error?: string;
       }>;
       pickProject: () => Promise<{ path: string; name: string } | null>;
+      projectStatus: () => Promise<ProjectStatus>;
+      openProject: (path: string) => Promise<{
+        ok: boolean;
+        needsCreation?: boolean;
+        error?: string;
+      }>;
+      relinkProject: (previousPath: string, path: string) => Promise<{
+        ok: boolean;
+        error?: string;
+      }>;
+      createProjectWorkspace: (path: string) => Promise<{
+        ok: boolean;
+        error?: string;
+      }>;
       openContext: (path: string) => Promise<void>;
       syncDesign: (workspace: Workspace) => void;
       openPanel: (

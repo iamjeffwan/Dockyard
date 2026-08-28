@@ -9,17 +9,22 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import {
   CodexCliTraceEvent,
   invokeCodexCliStructured,
   validateCodexCliConfig,
 } from "./codex-cli-model.js";
 import { classifyWindowOpen } from "./external-navigation.js";
+import {
+  atomicWriteJson as atomicJson,
+  readJsonFile as readJson,
+  resolveInsideWorkspace,
+  validateWorkspaceDocuments,
+} from "./workspace-files.js";
 import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types";
 
 const execFileAsync = promisify(execFile);
@@ -46,6 +51,8 @@ if (process.platform === "win32" && process.env.DOCKYARD_DISABLE_GPU !== "0") {
 }
 
 let workspace: any = null;
+let currentProjectPath: string | null = null;
+let workspaceLoadError: string | null = null;
 let mcpHttpPort = 0;
 let barWindow: BrowserWindow | null = null;
 const panelWindows = new Map<View, BrowserWindow>();
@@ -84,27 +91,67 @@ function dataRoot() {
 function indexPath() {
   return join(dataRoot(), "index.json");
 }
-function workspaceRoot(id: string) {
-  return join(dataRoot(), "workspaces", id);
+function projectRoot(projectPath: string) {
+  return join(resolve(projectPath), ".dockyard");
 }
-function ensureWorkspaceDirs(id: string) {
-  const root = workspaceRoot(id);
+function projectWorkspacePath(projectPath: string) {
+  return join(projectRoot(projectPath), "design.json");
+}
+function projectMetadataPath(projectPath: string) {
+  return join(projectRoot(projectPath), "workspace.json");
+}
+function validProjectPath(projectPath: unknown): projectPath is string {
+  if (typeof projectPath !== "string" || !isAbsolute(projectPath)) return false;
+  try {
+    return statSync(projectPath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function projectRef(projectPath: string, recent: any[] = [], workspaceId?: string) {
+  const existing = recent.find((item) => item.path === projectPath);
+  return {
+    path: projectPath,
+    name: basename(projectPath),
+    lastUsedAt: existing?.lastUsedAt || now(),
+    workspaceId: workspaceId || existing?.workspaceId,
+  };
+}
+function updateProjectIndex(
+  projectPath: string,
+  recent: any[] = [],
+  workspaceId?: string,
+) {
+  const next = projectRef(projectPath, recent, workspaceId);
+  const projects = [
+    next,
+    ...recent.filter((item) => item.path !== projectPath),
+  ].slice(0, 12);
+  const index = readJson<any>(indexPath()) || {};
+  atomicJson(indexPath(), {
+    ...index,
+    version: 2,
+    currentProjectPath: projectPath,
+    currentWorkspaceId: workspaceId || index.currentWorkspaceId,
+    recentProjects: projects,
+    lastOpenedAt: now(),
+  });
+  return projects;
+}
+function ensureProjectDirs(projectPath: string) {
+  const root = projectRoot(projectPath);
   for (const dir of [
     "artworks",
     "assets/source",
     "assets/previews",
     "assets/components",
-    "cache/candidates",
+    "context",
   ])
     mkdirSync(join(root, dir), { recursive: true });
-  mkdirSync(join(dataRoot(), "global-components"), { recursive: true });
+  const ignorePath = join(root, ".gitignore");
+  if (!existsSync(ignorePath))
+    writeFileSync(ignorePath, "# Dockyard 临时文件\n*.tmp\n", "utf8");
   return root;
-}
-function atomicJson(path: string, value: unknown) {
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2), "utf8");
-  renameSync(tmp, path);
 }
 function dataUrlToFile(dataUrl: string | undefined, filePath: string) {
   if (!dataUrl) return;
@@ -128,14 +175,6 @@ function fileToDataUrl(path: string) {
         ? "image/webp"
         : "image/png";
   return `data:${mime};base64,${readFileSync(path).toString("base64")}`;
-}
-function readJson<T>(path: string): T | null {
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as T;
-  } catch {
-    return null;
-  }
 }
 function defaultScene() {
   return {
@@ -168,90 +207,99 @@ function loadGlobalComponents() {
   for (const item of items)
     if (item.previewPath)
       item.previewDataUrl = fileToDataUrl(
-        join(dataRoot(), "global-components", item.previewPath),
+        resolveInsideWorkspace(
+          join(dataRoot(), "global-components"),
+          item.previewPath,
+        ),
       );
   return items;
 }
-function legacyWorkspace() {
-  const old = readJson<any>(
-    join(dataRoot(), "sessions", "default", "design.json"),
-  );
-  if (!old) return null;
-  const artworkId = old.id || uid("artwork");
-  const source = old.source
-    ? {
-        ...old.source,
-        path: old.source.path || `assets/source/${old.source.hash}.png`,
-      }
-    : null;
-  if (source?.path)
-    source.dataUrl = fileToDataUrl(
-      join(dataRoot(), "sessions", "default", source.path),
-    );
-  return {
-    ...defaultWorkspace(),
-    id: uid("workspace"),
-    name: "迁移的设计",
-    currentArtworkId: artworkId,
-    artworks: [
-      {
-        id: artworkId,
-        name: source?.name || "图稿1",
-        updatedAt: old.updatedAt || now(),
-        source,
-        scene: defaultScene(),
-        annotations: old.annotations || [],
-        components: old.components || [],
-        notes: old.notes || "",
-      },
-    ],
-    globalComponents: loadGlobalComponents(),
-  };
-}
-function loadWorkspace() {
-  const index = readJson<any>(indexPath());
-  const id = index?.currentWorkspaceId;
-  const saved = id
-    ? readJson<any>(join(workspaceRoot(id), "design.json"))
-    : null;
-  const loaded = saved || legacyWorkspace() || defaultWorkspace();
+function hydrateWorkspace(loaded: any, root: string) {
   loaded.libraryItems ||= [];
-  ensureWorkspaceDirs(loaded.id);
   loaded.globalComponents = loadGlobalComponents();
   for (const artwork of loaded.artworks || []) {
-    const root = join(workspaceRoot(loaded.id), "artworks", artwork.id);
+    const scenePath = resolveInsideWorkspace(
+      root,
+      artwork.scenePath || `artworks/${artwork.id}/scene.excalidraw.json`,
+    );
     artwork.scene =
-      readJson<any>(join(root, "scene.excalidraw.json")) ||
-      artwork.scene ||
-      defaultScene();
+      readJson<any>(scenePath) ||
+        artwork.scene ||
+        defaultScene();
     for (const file of Object.values<any>(artwork.scene.files || {}))
       if (file.path)
-        file.dataURL = fileToDataUrl(join(workspaceRoot(loaded.id), file.path));
+        file.dataURL = fileToDataUrl(resolveInsideWorkspace(root, file.path));
     if (artwork.source?.path)
       artwork.source.dataUrl = fileToDataUrl(
-        join(workspaceRoot(loaded.id), artwork.source.path),
+        resolveInsideWorkspace(root, artwork.source.path),
       );
     if (artwork.previewPath)
       artwork.annotatedPreviewDataUrl = fileToDataUrl(
-        join(workspaceRoot(loaded.id), artwork.previewPath),
+        resolveInsideWorkspace(root, artwork.previewPath),
       );
   }
+  return loaded;
+}
+function loadWorkspace() {
+  const index = readJson<any>(indexPath());
+  const recentProjects = Array.isArray(index?.recentProjects)
+    ? index.recentProjects
+    : [];
+  currentProjectPath = validProjectPath(index?.currentProjectPath)
+    ? index.currentProjectPath
+    : null;
+  if (currentProjectPath) {
+    const designPath = projectWorkspacePath(currentProjectPath);
+    const projectSaved = readJson<any>(designPath);
+    if (projectSaved) {
+      try {
+        const metadata = readJson<any>(projectMetadataPath(currentProjectPath));
+        validateWorkspaceDocuments(
+          projectSaved,
+          metadata || undefined,
+          index?.currentWorkspaceId,
+        );
+        workspace = hydrateWorkspace(
+          projectSaved,
+          ensureProjectDirs(currentProjectPath),
+        );
+        workspace.recentProjects = recentProjects;
+        workspace.windowState = index?.windowState || {};
+        updateProjectIndex(currentProjectPath, recentProjects, workspace.id);
+        workspaceLoadError = null;
+        return workspace;
+      } catch (error) {
+        workspaceLoadError =
+          error instanceof Error ? error.message : "工作区读取失败";
+      }
+    } else if (existsSync(designPath)) {
+      workspaceLoadError = `工作区文件无法读取：${designPath}`;
+    }
+    currentProjectPath = null;
+  }
+  const loaded = defaultWorkspace();
+  loaded.recentProjects = recentProjects;
+  loaded.windowState = index?.windowState || {};
   workspace = loaded;
   atomicJson(indexPath(), {
-    version: 1,
-    currentWorkspaceId: loaded.id,
+    ...index,
+    version: 2,
     lastOpenedAt: now(),
   });
   return loaded;
 }
 function saveWorkspace(next: any) {
+  if (!currentProjectPath)
+    return { ok: false, error: "请先选择代码项目，再保存工作区" };
   workspace = next;
-  const root = ensureWorkspaceDirs(next.id);
+  const root = ensureProjectDirs(currentProjectPath);
   const persisted = JSON.parse(JSON.stringify(next));
   delete persisted.globalComponents;
+  delete persisted.recentProjects;
+  delete persisted.windowState;
   for (const artwork of persisted.artworks || []) {
     const actual = next.artworks.find((item: any) => item.id === artwork.id);
-    const artworkRoot = join(root, "artworks", artwork.id);
+    const artworkRoot = resolveInsideWorkspace(root, `artworks/${artwork.id}`);
     mkdirSync(artworkRoot, { recursive: true });
     const scene = JSON.parse(JSON.stringify(actual.scene || defaultScene()));
     for (const [fileId, file] of Object.entries<any>(scene.files || {})) {
@@ -261,7 +309,7 @@ function saveWorkspace(next: any) {
       const relative = isSource
         ? `assets/source/${fileId}.png`
         : `assets/components/${fileId}.${extension}`;
-      dataUrlToFile(file.dataURL, join(root, relative));
+      dataUrlToFile(file.dataURL, resolveInsideWorkspace(root, relative));
       delete file.dataURL;
       file.path = relative;
     }
@@ -270,7 +318,10 @@ function saveWorkspace(next: any) {
     artwork.scenePath = `artworks/${artwork.id}/scene.excalidraw.json`;
     if (actual.source?.dataUrl && actual.source.hash) {
       const sourcePath = `assets/source/${actual.source.hash}.png`;
-      dataUrlToFile(actual.source.dataUrl, join(root, sourcePath));
+      dataUrlToFile(
+        actual.source.dataUrl,
+        resolveInsideWorkspace(root, sourcePath),
+      );
       artwork.source = {
         ...artwork.source,
         dataUrl: undefined,
@@ -280,7 +331,10 @@ function saveWorkspace(next: any) {
     }
     if (actual.annotatedPreviewDataUrl) {
       const previewPath = `assets/previews/${actual.id}.png`;
-      dataUrlToFile(actual.annotatedPreviewDataUrl, join(root, previewPath));
+      dataUrlToFile(
+        actual.annotatedPreviewDataUrl,
+        resolveInsideWorkspace(root, previewPath),
+      );
       artwork.previewPath = previewPath;
       delete artwork.annotatedPreviewDataUrl;
     }
@@ -288,6 +342,12 @@ function saveWorkspace(next: any) {
       delete component.previewDataUrl;
   }
   atomicJson(join(root, "design.json"), persisted);
+  atomicJson(projectMetadataPath(currentProjectPath), {
+    version: 1,
+    id: next.id,
+    name: next.name,
+    updatedAt: next.updatedAt || now(),
+  });
   const globalComponents = (next.globalComponents || []).map((item: any) => {
     const copy = { ...item };
     if (copy.previewDataUrl) {
@@ -295,10 +355,10 @@ function saveWorkspace(next: any) {
         ? "svg"
         : "png";
       const relative = `${copy.globalId}.${extension}`;
-      dataUrlToFile(
-        copy.previewDataUrl,
-        join(dataRoot(), "global-components", relative),
-      );
+      dataUrlToFile(copy.previewDataUrl, resolveInsideWorkspace(
+        join(dataRoot(), "global-components"),
+        relative,
+      ));
       delete copy.previewDataUrl;
       copy.previewPath = relative;
     }
@@ -308,12 +368,152 @@ function saveWorkspace(next: any) {
     join(dataRoot(), "global-components", "index.json"),
     globalComponents,
   );
+  const index = readJson<any>(indexPath()) || {};
   atomicJson(indexPath(), {
-    version: 1,
+    ...index,
+    version: currentProjectPath ? 2 : 1,
     currentWorkspaceId: next.id,
+    currentProjectPath: currentProjectPath || undefined,
+    windowState: next.windowState || index.windowState || {},
     lastOpenedAt: now(),
   });
   return { ok: true, path: join(root, "design.json") };
+}
+function projectStatus() {
+  const index = readJson<any>(indexPath()) || {};
+  const recent = (Array.isArray(index.recentProjects) ? index.recentProjects : []).map(
+    (item: any) => ({ ...item, available: validProjectPath(item.path) }),
+  );
+  const current = validProjectPath(currentProjectPath)
+    ? projectRef(currentProjectPath, recent)
+    : null;
+  const missingCurrent =
+    !current && typeof index.currentProjectPath === "string"
+      ? {
+          ...projectRef(index.currentProjectPath, recent, index.currentWorkspaceId),
+          available: false,
+        }
+      : null;
+  return {
+    current,
+    missingCurrent,
+    recent,
+    hasWorkspace: Boolean(current && existsSync(projectWorkspacePath(current.path))),
+    error: workspaceLoadError || undefined,
+  };
+}
+function openProject(projectPath: string) {
+  if (!validProjectPath(projectPath))
+    return { ok: false, error: "项目目录不存在或不可访问" };
+  const targetPath = resolve(projectPath);
+  const designPath = projectWorkspacePath(targetPath);
+  if (!existsSync(designPath)) return { ok: true, needsCreation: true };
+  const saved = readJson<any>(designPath);
+  if (!saved)
+    return { ok: false, error: `工作区文件无法读取：${designPath}` };
+  try {
+    const metadata = readJson<any>(projectMetadataPath(targetPath));
+    validateWorkspaceDocuments(saved, metadata || undefined);
+    if (currentProjectPath && currentProjectPath !== targetPath && workspace) {
+      const currentSaved = saveWorkspace({ ...workspace, updatedAt: now() });
+      if (!currentSaved.ok) return currentSaved;
+    }
+    currentProjectPath = targetPath;
+    workspace = hydrateWorkspace(saved, ensureProjectDirs(currentProjectPath));
+    workspaceLoadError = null;
+    const index = readJson<any>(indexPath()) || {};
+    workspace.windowState = index.windowState || {};
+    workspace.recentProjects = updateProjectIndex(
+      currentProjectPath,
+      index.recentProjects || [],
+      workspace.id,
+    );
+    if (!existsSync(projectMetadataPath(currentProjectPath)))
+      atomicJson(projectMetadataPath(currentProjectPath), {
+        version: 1,
+        id: workspace.id,
+        name: workspace.name,
+        updatedAt: workspace.updatedAt || now(),
+      });
+    broadcast();
+    return { ok: true, needsCreation: false };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "项目切换失败",
+    };
+  }
+}
+function createProjectWorkspace(projectPath: string) {
+  if (!validProjectPath(projectPath))
+    return { ok: false, error: "项目目录不存在或不可访问" };
+  const targetPath = resolve(projectPath);
+  const designPath = projectWorkspacePath(targetPath);
+  if (existsSync(designPath))
+    return { ok: false, error: `目标项目已有工作区：${designPath}` };
+  try {
+    if (currentProjectPath && currentProjectPath !== targetPath && workspace) {
+      const currentSaved = saveWorkspace({ ...workspace, updatedAt: now() });
+      if (!currentSaved.ok) return currentSaved;
+    }
+    currentProjectPath = targetPath;
+    const index = readJson<any>(indexPath()) || {};
+    const next: any = defaultWorkspace();
+    next.name = basename(currentProjectPath);
+    next.windowState = index.windowState || {};
+    next.recentProjects = updateProjectIndex(
+      currentProjectPath,
+      index.recentProjects || [],
+      next.id,
+    );
+    const saved = saveWorkspace(next);
+    if (!saved.ok) return saved;
+    broadcast();
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "工作区创建失败",
+    };
+  }
+}
+function relinkProject(previousPath: string, projectPath: string) {
+  if (!validProjectPath(projectPath))
+    return { ok: false, error: "新项目目录不存在或不可访问" };
+  const targetPath = resolve(projectPath);
+  const saved = readJson<any>(projectWorkspacePath(targetPath));
+  const metadata = readJson<any>(projectMetadataPath(targetPath));
+  if (!saved || !metadata)
+    return { ok: false, error: "所选目录没有完整的 Dockyard 工作区" };
+  const index = readJson<any>(indexPath()) || {};
+  const previous = (index.recentProjects || []).find(
+    (item: any) => item.path === previousPath,
+  );
+  const expectedId = previous?.workspaceId ||
+    (index.currentProjectPath === previousPath ? index.currentWorkspaceId : undefined);
+  if (!expectedId)
+    return { ok: false, error: "缺少原工作区标识，不能安全地重新定位" };
+  try {
+    validateWorkspaceDocuments(saved, metadata, expectedId);
+    hydrateWorkspace(
+      JSON.parse(JSON.stringify(saved)),
+      ensureProjectDirs(targetPath),
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "工作区标识校验失败",
+    };
+  }
+  atomicJson(indexPath(), {
+    ...index,
+    currentProjectPath: targetPath,
+    currentWorkspaceId: expectedId,
+    recentProjects: (index.recentProjects || []).filter(
+      (item: any) => item.path !== previousPath && item.path !== targetPath,
+    ),
+  });
+  return openProject(targetPath);
 }
 function currentArtwork() {
   return (
@@ -371,14 +571,14 @@ function rendererUrl(view: "bar" | View) {
   return (
     process.env.VITE_DEV_SERVER_URL ||
     (dev ? "http://localhost:5173" : null) ||
-    `file://${join(__dirname, "../dist/index.html")}`
+    `file://${join(__dirname, "../../dist/index.html")}`
   );
 }
 function loadView(window: BrowserWindow, view: "bar" | View) {
   const url = rendererUrl(view);
   if (url.startsWith("http")) window.loadURL(`${url}?view=${view}`);
   else
-    window.loadFile(join(__dirname, "../dist/index.html"), {
+    window.loadFile(join(__dirname, "../../dist/index.html"), {
       search: `view=${view}`,
     });
 }
@@ -468,6 +668,12 @@ function createBarWindow() {
     if (workspace && barWindow) {
       const [x, y] = barWindow.getPosition();
       workspace.windowState = { ...workspace.windowState, bar: { x, y } };
+      const index = readJson<any>(indexPath()) || {};
+      atomicJson(indexPath(), {
+        ...index,
+        version: 2,
+        windowState: workspace.windowState,
+      });
     }
   });
   barWindow.on("closed", () => {
@@ -518,11 +724,9 @@ function openPanel(view: View) {
   panel.on("closed", () => panelWindows.delete(view));
 }
 function candidateCacheRoot() {
-  return join(
-    ensureWorkspaceDirs(workspace?.id || "search"),
-    "cache",
-    "candidates",
-  );
+  const root = join(dataRoot(), "cache", "candidates");
+  mkdirSync(root, { recursive: true });
+  return root;
 }
 function candidateAssetPath(name: string) {
   return join(candidateCacheRoot(), name);
@@ -792,6 +996,127 @@ const selectSchema = {
     },
   },
 };
+const storybookMatchSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["matches"],
+  properties: {
+    matches: {
+      type: "array",
+      maxItems: 30,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["sourceId", "path"],
+        properties: {
+          sourceId: { type: "string", minLength: 1 },
+          path: { type: "string", minLength: 1 },
+        },
+      },
+    },
+  },
+};
+const storybookQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["terms"],
+  properties: {
+    terms: {
+      type: "array",
+      minItems: 1,
+      maxItems: 8,
+      items: { type: "string", minLength: 2, maxLength: 40 },
+    },
+  },
+};
+async function runStorybookSearch(
+  payload: { sketchDataUrl?: string; sourceIds?: string[] },
+  onTrace?: (event: CodexCliTraceEvent) => void,
+) {
+  const diagnostics: string[] = [];
+  const trace = (message: string) => {
+    diagnostics.push(message);
+    onTrace?.({ invocationId: "storybook-search", at: now(), stage: "event", message });
+  };
+  try {
+    if (!payload.sketchDataUrl) throw new Error("没有收到草图图片");
+    const sourceIds = [...new Set(payload.sourceIds || [])].filter((id) => storybookSource(id));
+    if (!sourceIds.length) throw new Error("没有选择 Storybook 来源");
+    const catalogs = await Promise.all(sourceIds.map((id) => loadStorybookCatalog(id)));
+    const candidatesBySource = catalogs.map((catalog) => {
+      const groups = new Map<string, string[]>();
+      for (const story of catalog.stories) {
+        const names = groups.get(story.title) || [];
+        names.push(story.name);
+        groups.set(story.title, names);
+      }
+      return {
+        catalog,
+        candidates: [...groups].map(([path, stories]) => ({
+          sourceId: catalog.source.id,
+          sourceName: catalog.source.name,
+          path,
+          stories,
+        })),
+      };
+    }).filter((item) => item.candidates.length > 0);
+    if (!candidatesBySource.length) throw new Error("所选 Storybook 没有可用目录");
+    const key = createHash("sha256")
+      .update(JSON.stringify({ sourceIds, sketchDataUrl: payload.sketchDataUrl }))
+      .digest("hex")
+      .slice(0, 24);
+    const sketchPath = join(candidateCacheRoot(), `${key}.storybook.sketch.png`);
+    dataUrlToFile(payload.sketchDataUrl, sketchPath);
+    const allCandidates = candidatesBySource.flatMap((item) => item.candidates);
+    trace(`已读取 ${allCandidates.length} 个原始目录候选`);
+    const queryPlan = await runCodexJson<{ terms: string[] }>(
+      "storybook-query-terms",
+      "查看附图草图，只生成用于检索 Storybook 原始目录的英文功能词。请覆盖同一功能的常见变体，例如 input、text input、password input、number input、search input、textarea、select、form field。只返回 terms 数组，不要返回目录、解释或代码。",
+      storybookQuerySchema,
+      sketchPath,
+      onTrace,
+    );
+    const terms = [...new Set((queryPlan.terms || []).map((term) => term.trim().toLowerCase()).filter(Boolean))];
+    trace(`模型生成检索词：${terms.join("、")}`);
+    const expandedCandidates = allCandidates.filter((candidate) => {
+      const haystack = `${candidate.path} ${candidate.stories.join(" ")}`.toLowerCase();
+      return terms.some((term) => term.split(/\s+/).every((token) => haystack.includes(token)));
+    });
+    const shortlist = expandedCandidates.length ? expandedCandidates : allCandidates;
+    trace(`本地候选扩展后保留 ${shortlist.length} 个目录`);
+    const selection = await runCodexJson<{ matches: Array<{ sourceId: string; path: string }> }>(
+      "storybook-selection",
+      `查看附图草图。从下列不同 Storybook 的原始目录中，以高召回率选择所有可能相关的目录。输入框的不同功能变体也要纳入，不要只选择名称恰好等于 Input 的目录。不要改写、翻译或合并 path；只能原样返回 sourceId 和 path。若没有匹配项，返回空数组。候选目录：${JSON.stringify(shortlist)}`,
+      storybookMatchSchema,
+      sketchPath,
+      onTrace,
+    );
+    const matches = (selection.matches || []).map((item) => {
+      const source = storybookSource(item.sourceId);
+      if (!source) {
+        diagnostics.push(`未找到来源：${item.sourceId} / ${item.path}`);
+        return { sourceId: item.sourceId, path: item.path, stories: [], status: "source-not-found" as const };
+      }
+      const catalog = catalogs.find((value) => value.source.id === item.sourceId);
+      const stories = catalog?.stories.filter((story) => story.title === item.path) || [];
+      if (!stories.length) {
+        diagnostics.push(`未找到目录：${item.sourceId} / ${item.path}`);
+        return { sourceId: item.sourceId, path: item.path, stories: [], status: "path-not-found" as const };
+      }
+      return { sourceId: item.sourceId, path: item.path, stories, status: "matched" as const };
+    })
+      .filter((item, index, all) => all.findIndex((candidate) => candidate.sourceId === item.sourceId && candidate.path === item.path) === index);
+    trace(`模型返回 ${matches.length} 条目录判断`);
+    return { matches, source: "codex" as const, diagnostics };
+  } catch (error) {
+    return {
+      matches: [],
+      source: "error" as const,
+      error: error instanceof Error ? error.message : "Storybook 检索失败",
+      diagnostics,
+    };
+  }
+}
 function writePreviewHarness(root: string, slug: string) {
   const source = join(root, "src");
   mkdirSync(join(source, "lib"), { recursive: true });
@@ -1028,16 +1353,17 @@ async function runCodex(payload: {
   }
 }
 async function generateContext(payload: {
-  projectPath: string;
   artworkId: string;
   prompt: string;
 }) {
+  if (!currentProjectPath) throw new Error("请先选择代码项目");
   const artwork = workspace?.artworks?.find(
     (item: any) => item.id === payload.artworkId,
   );
   if (!artwork) throw new Error("当前图稿不存在");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const base = join(payload.projectPath, ".dockyard", "context", artwork.id);
+  const root = ensureProjectDirs(currentProjectPath);
+  const base = resolveInsideWorkspace(root, `context/${artwork.id}`);
   const dir = join(base, stamp);
   mkdirSync(dir, { recursive: true });
   const latest = join(base, "latest");
@@ -1086,9 +1412,16 @@ app.whenReady().then(() => {
   workspace = loadWorkspace();
   startMcpServer();
   ipcMain.handle("workspace:save", (_event, next: any) => {
-    const result = saveWorkspace({ ...next, updatedAt: now() });
-    broadcast();
-    return result;
+    try {
+      const result = saveWorkspace({ ...next, updatedAt: now() });
+      if (result.ok) broadcast();
+      return result;
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "工作区保存失败",
+      };
+    }
   });
   ipcMain.handle("workspace:load", () => workspace);
   ipcMain.handle("storybook:sources", () => storybookSources);
@@ -1112,6 +1445,9 @@ app.whenReady().then(() => {
   ipcMain.handle("codex:search", (event, payload) =>
     runCodex(payload, (trace) => event.sender.send("codex:trace", trace)),
   );
+  ipcMain.handle("codex:storybook-search", (event, payload) =>
+    runStorybookSearch(payload, (trace) => event.sender.send("codex:trace", trace)),
+  );
   ipcMain.handle("codex:logs-open", () => shell.openPath(candidateCacheRoot()));
   ipcMain.handle("component-cache:status", () => clearExpiredCandidateCache());
   ipcMain.handle("component-cache:clear", () =>
@@ -1128,6 +1464,16 @@ app.whenReady().then(() => {
     const path = result.filePaths[0];
     return { path, name: basename(path) };
   });
+  ipcMain.handle("project:status", () => projectStatus());
+  ipcMain.handle("project:open", (_event, path: string) => openProject(path));
+  ipcMain.handle(
+    "project:relink",
+    (_event, previousPath: string, path: string) =>
+      relinkProject(previousPath, path),
+  );
+  ipcMain.handle("project:create-workspace", (_event, path: string) =>
+    createProjectWorkspace(path),
+  );
   ipcMain.handle("context:open", (_event, path: string) =>
     shell.openPath(path),
   );

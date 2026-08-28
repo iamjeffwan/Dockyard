@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { listeningPids } from "./dev-processes.mjs";
 
 const root = process.cwd();
 const electronBin = join(
@@ -10,23 +11,7 @@ const electronBin = join(
   "electron.exe",
 );
 
-function listeningPids(port) {
-  if (process.platform !== "win32") return [];
-  const result = spawnSync("netstat", ["-ano", "-p", "tcp"], {
-    encoding: "utf8",
-  });
-  const pattern = new RegExp(`:${port}\\s+.*LISTENING\\s+(\\d+)\\s*$`, "i");
-  return [
-    ...new Set(
-      String(result.stdout || "")
-        .split(/\r?\n/)
-        .map((line) => line.match(pattern)?.[1])
-        .filter(Boolean),
-    ),
-  ];
-}
-
-for (const pid of listeningPids(5173)) {
+for (const pid of new Set(listeningPids(5173))) {
   spawnSync("taskkill", ["/pid", pid, "/t", "/f"], { stdio: "ignore" });
 }
 
@@ -43,4 +28,12 @@ if (process.platform === "win32") {
   );
 }
 
-console.log("Dockyard 开发进程已关闭，5173 端口已释放。");
+const remaining = [...new Set(listeningPids(5173))];
+if (remaining.length > 0) {
+  console.error(
+    `5173 端口仍被占用（PID: ${remaining.join(", ")}），请先关闭对应进程。`,
+  );
+  process.exitCode = 1;
+} else {
+  console.log("Dockyard 开发进程已关闭，5173 端口已释放。");
+}
