@@ -70,12 +70,25 @@ await cdp(bar, "Input.dispatchMouseEvent", {
 
 const startedAt = Date.now();
 let opened = false;
+let annotator;
 while (Date.now() - startedAt < 3000) {
-  if ((await targets()).some((item) => item.url.includes("view=annotator"))) {
+  annotator = (await targets()).find((item) => item.url.includes("view=annotator"));
+  if (annotator) {
     opened = true;
     break;
   }
   await delay(100);
 }
 assert.ok(opened, "点击画稿后没有打开画板窗口");
+await delay(500);
+const rendered = await evaluate(
+  annotator,
+  `(() => ({
+    rootChildren: document.querySelector("#root")?.children.length || 0,
+    hasCanvas: Boolean(document.querySelector(".excalidraw-wrap canvas")),
+    hasToolbar: Boolean(document.querySelector(".excalidraw")),
+  }))()`,
+);
+assert.ok(rendered.rootChildren > 0, "画板窗口打开但 React 根节点为空");
+assert.ok(rendered.hasCanvas || rendered.hasToolbar, "画板窗口打开但 Excalidraw 未渲染");
 console.log("画稿点击打开验证通过。");

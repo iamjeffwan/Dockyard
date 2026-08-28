@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Dockyard design context workbench",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:stop": "node scripts/stop-dev.mjs",
