@@ -11,6 +11,7 @@ import {
   MainMenu,
   Sidebar,
   convertToExcalidrawElements,
+  exportToBlob,
   useHandleLibrary,
 } from "@excalidraw/excalidraw";
 import {
@@ -48,6 +49,7 @@ import type {
   StorybookCatalog,
   StorybookSource,
   StorybookStory,
+  StorybookSearchResult,
 } from "./types";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
@@ -60,6 +62,24 @@ import projectTokenData from "../design/project-tokens.json";
 const uid = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const now = () => new Date().toISOString();
+async function exportSelectedSketch(api: ExcalidrawImperativeAPI) {
+  const appState = api.getAppState();
+  const selectedIds = appState.selectedElementIds || {};
+  const elements = api.getSceneElements().filter((element) => selectedIds[element.id]);
+  if (!elements.length) return null;
+  const blob = await exportToBlob({
+    elements,
+    appState: { ...appState, selectedElementIds: {} },
+    files: api.getFiles(),
+    exportPadding: 16,
+  });
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error || new Error("草图导出失败"));
+    reader.readAsDataURL(blob);
+  });
+}
 const emptyScene = (): SceneData => ({
   type: "excalidraw",
   version: 2,
@@ -298,16 +318,23 @@ function StorybookSidebar({
   selection,
   onSelectionChange,
   onStoryDragStart,
+  excalidrawAPI,
 }: {
   selection?: Workspace["storybookSelection"];
   onSelectionChange: (story: StorybookStory) => void;
   onStoryDragStart?: (event: React.DragEvent<HTMLButtonElement>, story: StorybookStory) => void;
+  excalidrawAPI?: ExcalidrawImperativeAPI | null;
 }) {
   const [sources, setSources] = useState<StorybookSource[]>([]);
   const [sourceId, setSourceId] = useState(selection?.sourceId || "");
   const [catalog, setCatalog] = useState<StorybookCatalog | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("正在读取来源…");
+  const [sketchOpen, setSketchOpen] = useState(false);
+  const [sketchDataUrl, setSketchDataUrl] = useState<string | null>(null);
+  const [searchingSketch, setSearchingSketch] = useState(false);
+  const [storybookResult, setStorybookResult] = useState<StorybookSearchResult | null>(null);
+  const [searchSourceIds, setSearchSourceIds] = useState<string[]>([]);
   useEffect(() => {
     const request = window.dockyard?.storybookSources();
     if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
@@ -315,6 +342,7 @@ function StorybookSidebar({
       setSources(items || []);
       const next = selection?.sourceId || items?.[0]?.id || "";
       setSourceId(next);
+      setSearchSourceIds((current) => current.length ? current : (items || []).map((item) => item.id));
     }).catch(() => setStatus("来源读取失败"));
   }, [selection?.sourceId]);
   useEffect(() => {
@@ -338,6 +366,34 @@ function StorybookSidebar({
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [catalog, query]);
+  const visibleGroups = useMemo(() => {
+    if (!storybookResult) return groups;
+    const selected = new Set(sourceId ? [sourceId] : (searchSourceIds.length ? searchSourceIds : sources.map((item) => item.id)));
+    const map = new Map<string, StorybookStory[]>();
+    for (const match of storybookResult.matches) {
+      if (match.status !== "matched" || !selected.has(match.sourceId)) continue;
+      map.set(`${match.sourceId}::${match.path}`, match.stories);
+    }
+    return [...map.entries()].map(([key, stories]) => [key.split("::").slice(1).join("::"), stories] as [string, StorybookStory[]]);
+  }, [groups, searchSourceIds, sourceId, sources, storybookResult]);
+  const captureSketch = async () => {
+    if (!excalidrawAPI) return;
+    try {
+      const dataUrl = await exportSelectedSketch(excalidrawAPI);
+      setSketchDataUrl(dataUrl);
+      setStatus(dataUrl ? "已获取当前选区" : "请先在画板中框选区域");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "草图导出失败");
+    }
+  };
+  const runSketchSearch = async () => {
+    if (!sketchDataUrl || searchingSketch) return;
+    setSearchingSketch(true);
+    setStorybookResult(null);
+    const result = await window.dockyard?.runStorybookSearch({ sketchDataUrl, sourceIds: searchSourceIds });
+    setStorybookResult(result || null);
+    setSearchingSketch(false);
+  };
   return (
     <Sidebar name="dockyard-storybook" docked={false}>
       <Sidebar.Tabs>
@@ -352,9 +408,20 @@ function StorybookSidebar({
           </Sidebar.Header>
           <div className="storybook-panel-body">
             <label className="storybook-search"><Search size={13} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="查找组件或故事" /></label>
+            {storybookResult && <div className="storybook-search-mode">草图匹配 <button type="button" onClick={() => setStorybookResult(null)}>返回完整组件库</button></div>}
+            <button type="button" className="storybook-sketch-trigger" onClick={() => setSketchOpen((value) => !value)}>按草图找相似组件</button>
+            {sketchOpen && <div className="storybook-sketch-card">
+              <strong>草图检索</strong>
+              <div className="storybook-sketch-preview">{sketchDataUrl ? <img src={sketchDataUrl} alt="当前草图选区" /> : "待从画稿获取选区"}</div>
+              <div className="storybook-sketch-actions"><button type="button" onClick={() => void captureSketch()}>使用当前选区</button><button type="button" onClick={() => setSketchDataUrl(null)}>清除草图</button></div>
+              <small>检索来源（可多选）</small>
+              {sources.map((source) => <label key={source.id} className="storybook-source-check"><input type="checkbox" checked={searchSourceIds.includes(source.id)} onChange={(event) => setSearchSourceIds((current) => event.target.checked ? [...new Set([...current, source.id])] : current.filter((id) => id !== source.id))} />{source.name}</label>)}
+              <button type="button" disabled={!sketchDataUrl || searchingSketch} onClick={() => void runSketchSearch()}>{searchingSketch ? "正在检索…" : "开始检索"}</button>
+              {storybookResult?.diagnostics?.map((item) => <small key={item} className="storybook-diagnostic">{item}</small>)}
+            </div>}
             <small className="storybook-status">{status}</small>
             <div className="storybook-groups">
-              {groups.map(([title, stories]) => <section key={title} className="storybook-group">
+              {visibleGroups.map(([title, stories]) => <section key={title} className="storybook-group">
                 <h3>{title}</h3>
                 {stories.map((story) => <button key={story.id} type="button" draggable onClick={() => onSelectionChange(story)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "copy"; event.dataTransfer.setData("application/x-dockyard-story", JSON.stringify(story)); onStoryDragStart?.(event, story); }} className={selection?.storyId === story.id ? "selected" : ""}><span className="story-icon">▱</span>{story.name}</button>)}
               </section>)}
@@ -796,7 +863,7 @@ function SceneCanvas({
           },
         }}
       >
-        <StorybookSidebar selection={storybookSelection} onSelectionChange={onStorySelection} onStoryDragStart={onStoryDragStart} />
+        <StorybookSidebar selection={storybookSelection} onSelectionChange={onStorySelection} onStoryDragStart={onStoryDragStart} excalidrawAPI={excalidrawAPI} />
         <CanvasMainMenu
           hasArtwork={Boolean(artwork)}
           onChooseArtwork={onChooseArtwork}

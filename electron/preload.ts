@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("dockyard", {
   loadWorkspace: () => ipcRenderer.invoke("workspace:load"),
   runCodexSearch: (payload: unknown) =>
     ipcRenderer.invoke("codex:search", payload),
+  runStorybookSearch: (payload: unknown) =>
+    ipcRenderer.invoke("codex:storybook-search", payload),
   onCodexTrace: (listener: (trace: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, trace: unknown) =>
       listener(trace);

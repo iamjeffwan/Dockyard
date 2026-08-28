@@ -3,6 +3,7 @@ import type {
   CodexTraceEvent,
   ComponentSearchResult,
   StorybookCatalog,
+  StorybookSearchResult,
   StorybookSource,
   ProjectStatus,
   Workspace,
@@ -16,6 +17,7 @@ declare global {
       ) => Promise<{ ok: boolean; path?: string; error?: string }>;
       loadWorkspace: () => Promise<Workspace | null>;
       runCodexSearch: (payload: unknown) => Promise<ComponentSearchResult>;
+      runStorybookSearch: (payload: unknown) => Promise<StorybookSearchResult>;
       onCodexTrace: (listener: (trace: CodexTraceEvent) => void) => () => void;
       openCodexLogs: () => Promise<string>;
       componentCacheStatus: () => Promise<CacheStatus>;

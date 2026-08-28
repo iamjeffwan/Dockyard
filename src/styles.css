@@ -933,6 +933,17 @@ textarea:focus {
   font-size: 12px;
 }
 .storybook-status { color: var(--color-text-muted); font-size: 11px; }
+.storybook-sketch-trigger { border: 1px solid var(--color-accent-primary); border-radius: 5px; padding: 6px 8px; background: color-mix(in srgb, var(--color-accent-primary) 10%, transparent); color: var(--color-accent-primary); cursor: pointer; font-size: 11px; }
+.storybook-search-mode { display: flex; align-items: center; justify-content: space-between; border-left: 3px solid var(--color-accent-primary); padding: 6px 8px; background: color-mix(in srgb, var(--color-accent-primary) 10%, transparent); font-size: 11px; }
+.storybook-search-mode button { border: 0; background: transparent; color: var(--color-accent-primary); cursor: pointer; font-size: 11px; }
+.storybook-sketch-card { display: grid; gap: 7px; padding: 9px; border: 1px solid var(--color-border-default); border-radius: 6px; background: var(--color-surface-low); font-size: 11px; }
+.storybook-sketch-preview { display: grid; place-items: center; min-height: 76px; border: 1px dashed var(--color-border-default); background: var(--color-surface-high); color: var(--color-text-muted); overflow: hidden; }
+.storybook-sketch-preview img { display: block; max-width: 100%; max-height: 110px; object-fit: contain; }
+.storybook-sketch-actions { display: flex; gap: 6px; }
+.storybook-sketch-actions button, .storybook-sketch-card > button { border: 1px solid var(--color-border-default); border-radius: 4px; padding: 5px 7px; background: var(--color-surface-high); color: var(--color-text); cursor: pointer; font-size: 11px; }
+.storybook-sketch-card > button:disabled { opacity: .5; cursor: not-allowed; }
+.storybook-source-check { display: flex; align-items: center; gap: 6px; }
+.storybook-diagnostic { color: #b45309; }
 .storybook-groups { min-height: 0; max-height: 330px; overflow-y: auto; display: grid; gap: 10px; padding-right: 3px; }
 .storybook-group { display: grid; gap: 2px; }
 .storybook-group h3 { margin: 4px 6px; color: var(--color-text-muted); font-size: 11px; font-weight: 650; }

@@ -996,6 +996,94 @@ const selectSchema = {
     },
   },
 };
+const storybookMatchSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["matches"],
+  properties: {
+    matches: {
+      type: "array",
+      maxItems: 30,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["sourceId", "path"],
+        properties: {
+          sourceId: { type: "string", minLength: 1 },
+          path: { type: "string", minLength: 1 },
+        },
+      },
+    },
+  },
+};
+async function runStorybookSearch(
+  payload: { sketchDataUrl?: string; sourceIds?: string[] },
+  onTrace?: (event: CodexCliTraceEvent) => void,
+) {
+  const diagnostics: string[] = [];
+  const trace = (message: string) => {
+    diagnostics.push(message);
+    onTrace?.({ invocationId: "storybook-search", at: now(), stage: "event", message });
+  };
+  try {
+    if (!payload.sketchDataUrl) throw new Error("没有收到草图图片");
+    const sourceIds = [...new Set(payload.sourceIds || [])].filter((id) => storybookSource(id));
+    if (!sourceIds.length) throw new Error("没有选择 Storybook 来源");
+    const catalogs = await Promise.all(sourceIds.map((id) => loadStorybookCatalog(id)));
+    const candidates = catalogs.flatMap((catalog) => {
+      const groups = new Map<string, string[]>();
+      for (const story of catalog.stories) {
+        const names = groups.get(story.title) || [];
+        names.push(story.name);
+        groups.set(story.title, names);
+      }
+      return [...groups].map(([path, stories]) => ({
+        sourceId: catalog.source.id,
+        sourceName: catalog.source.name,
+        path,
+        stories,
+      }));
+    });
+    if (!candidates.length) throw new Error("所选 Storybook 没有可用目录");
+    const key = createHash("sha256")
+      .update(JSON.stringify({ sourceIds, sketchDataUrl: payload.sketchDataUrl }))
+      .digest("hex")
+      .slice(0, 24);
+    const sketchPath = join(candidateCacheRoot(), `${key}.storybook.sketch.png`);
+    dataUrlToFile(payload.sketchDataUrl, sketchPath);
+    trace(`已读取 ${candidates.length} 个原始目录候选`);
+    const selection = await runCodexJson<{ matches: Array<{ sourceId: string; path: string }> }>(
+      "storybook-selection",
+      `查看附图草图。从下列 Storybook 原始目录中选择所有可能匹配的目录。不要改写、翻译或合并 path；只能原样返回 sourceId 和 path。若没有匹配项，返回空数组。候选目录：${JSON.stringify(candidates)}`,
+      storybookMatchSchema,
+      sketchPath,
+      onTrace,
+    );
+    const matches = (selection.matches || []).map((item) => {
+      const source = storybookSource(item.sourceId);
+      if (!source) {
+        diagnostics.push(`未找到来源：${item.sourceId} / ${item.path}`);
+        return { sourceId: item.sourceId, path: item.path, stories: [], status: "source-not-found" as const };
+      }
+      const catalog = catalogs.find((value) => value.source.id === item.sourceId);
+      const stories = catalog?.stories.filter((story) => story.title === item.path) || [];
+      if (!stories.length) {
+        diagnostics.push(`未找到目录：${item.sourceId} / ${item.path}`);
+        return { sourceId: item.sourceId, path: item.path, stories: [], status: "path-not-found" as const };
+      }
+      return { sourceId: item.sourceId, path: item.path, stories, status: "matched" as const };
+    });
+    trace(`模型返回 ${matches.length} 条目录判断`);
+    return { matches, source: "codex" as const, diagnostics };
+  } catch (error) {
+    return {
+      matches: [],
+      source: "error" as const,
+      error: error instanceof Error ? error.message : "Storybook 检索失败",
+      diagnostics,
+    };
+  }
+}
 function writePreviewHarness(root: string, slug: string) {
   const source = join(root, "src");
   mkdirSync(join(source, "lib"), { recursive: true });
@@ -1323,6 +1411,9 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("codex:search", (event, payload) =>
     runCodex(payload, (trace) => event.sender.send("codex:trace", trace)),
+  );
+  ipcMain.handle("codex:storybook-search", (event, payload) =>
+    runStorybookSearch(payload, (trace) => event.sender.send("codex:trace", trace)),
   );
   ipcMain.handle("codex:logs-open", () => shell.openPath(candidateCacheRoot()));
   ipcMain.handle("component-cache:status", () => clearExpiredCandidateCache());

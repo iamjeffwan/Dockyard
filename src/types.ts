@@ -71,6 +71,20 @@ export type StorybookCatalog = {
   stories: StorybookStory[];
 };
 
+export type StorybookSearchMatch = {
+  sourceId: string;
+  path: string;
+  stories: StorybookStory[];
+  status: "matched" | "path-not-found" | "source-not-found";
+};
+
+export type StorybookSearchResult = {
+  matches: StorybookSearchMatch[];
+  source: "codex" | "cache" | "error";
+  error?: string;
+  diagnostics?: string[];
+};
+
 export type ComponentSearchResult = {
   candidates: Candidate[];
   source: "shadcn-cli" | "cache" | "error";
