@@ -98,6 +98,7 @@ export type ComponentInstance = Candidate & {
   status: "confirmed";
   sourceType?: "image" | "storybook";
   boundsSource?: "image" | "electron-web-frame-main" | "fallback";
+  loadStatus?: "loading" | "ready" | "unavailable";
   intrinsicWidth?: number;
   intrinsicHeight?: number;
   rotation?: number;
