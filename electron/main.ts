@@ -85,9 +85,6 @@ function dataRoot() {
 function indexPath() {
   return join(dataRoot(), "index.json");
 }
-function workspaceRoot(id: string) {
-  return join(dataRoot(), "workspaces", id);
-}
 function projectRoot(projectPath: string) {
   return join(resolve(projectPath), ".dockyard");
 }
@@ -136,19 +133,6 @@ function ensureProjectDirs(projectPath: string) {
     "context",
   ])
     mkdirSync(join(root, dir), { recursive: true });
-  return root;
-}
-function ensureWorkspaceDirs(id: string) {
-  const root = workspaceRoot(id);
-  for (const dir of [
-    "artworks",
-    "assets/source",
-    "assets/previews",
-    "assets/components",
-    "cache/candidates",
-  ])
-    mkdirSync(join(root, dir), { recursive: true });
-  mkdirSync(join(dataRoot(), "global-components"), { recursive: true });
   return root;
 }
 function atomicJson(path: string, value: unknown) {
@@ -223,42 +207,6 @@ function loadGlobalComponents() {
       );
   return items;
 }
-function legacyWorkspace() {
-  const old = readJson<any>(
-    join(dataRoot(), "sessions", "default", "design.json"),
-  );
-  if (!old) return null;
-  const artworkId = old.id || uid("artwork");
-  const source = old.source
-    ? {
-        ...old.source,
-        path: old.source.path || `assets/source/${old.source.hash}.png`,
-      }
-    : null;
-  if (source?.path)
-    source.dataUrl = fileToDataUrl(
-      join(dataRoot(), "sessions", "default", source.path),
-    );
-  return {
-    ...defaultWorkspace(),
-    id: uid("workspace"),
-    name: "迁移的设计",
-    currentArtworkId: artworkId,
-    artworks: [
-      {
-        id: artworkId,
-        name: source?.name || "图稿1",
-        updatedAt: old.updatedAt || now(),
-        source,
-        scene: defaultScene(),
-        annotations: old.annotations || [],
-        components: old.components || [],
-        notes: old.notes || "",
-      },
-    ],
-    globalComponents: loadGlobalComponents(),
-  };
-}
 function hydrateWorkspace(loaded: any, root: string) {
   loaded.libraryItems ||= [];
   loaded.globalComponents = loadGlobalComponents();
@@ -298,27 +246,23 @@ function loadWorkspace() {
     }
     currentProjectPath = null;
   }
-  const id = index?.currentWorkspaceId;
-  const saved = id
-    ? readJson<any>(join(workspaceRoot(id), "design.json"))
-    : null;
-  const raw = saved || legacyWorkspace() || defaultWorkspace();
-  const loaded = hydrateWorkspace(raw, ensureWorkspaceDirs(raw.id));
+  const loaded = defaultWorkspace();
   loaded.recentProjects = recentProjects;
   workspace = loaded;
   atomicJson(indexPath(), {
     ...index,
-    version: 1,
-    currentWorkspaceId: loaded.id,
+    version: 2,
+    currentWorkspaceId: undefined,
+    currentProjectPath: undefined,
     lastOpenedAt: now(),
   });
   return loaded;
 }
 function saveWorkspace(next: any) {
+  if (!currentProjectPath)
+    return { ok: false, error: "请先选择代码项目，再保存工作区" };
   workspace = next;
-  const root = currentProjectPath
-    ? ensureProjectDirs(currentProjectPath)
-    : ensureWorkspaceDirs(next.id);
+  const root = ensureProjectDirs(currentProjectPath);
   const persisted = JSON.parse(JSON.stringify(next));
   delete persisted.globalComponents;
   for (const artwork of persisted.artworks || []) {
@@ -481,14 +425,14 @@ function rendererUrl(view: "bar" | View) {
   return (
     process.env.VITE_DEV_SERVER_URL ||
     (dev ? "http://localhost:5173" : null) ||
-    `file://${join(__dirname, "../dist/index.html")}`
+    `file://${join(__dirname, "../../dist/index.html")}`
   );
 }
 function loadView(window: BrowserWindow, view: "bar" | View) {
   const url = rendererUrl(view);
   if (url.startsWith("http")) window.loadURL(`${url}?view=${view}`);
   else
-    window.loadFile(join(__dirname, "../dist/index.html"), {
+    window.loadFile(join(__dirname, "../../dist/index.html"), {
       search: `view=${view}`,
     });
 }
@@ -628,11 +572,9 @@ function openPanel(view: View) {
   panel.on("closed", () => panelWindows.delete(view));
 }
 function candidateCacheRoot() {
-  return join(
-    ensureWorkspaceDirs(workspace?.id || "search"),
-    "cache",
-    "candidates",
-  );
+  const root = join(dataRoot(), "cache", "candidates");
+  mkdirSync(root, { recursive: true });
+  return root;
 }
 function candidateAssetPath(name: string) {
   return join(candidateCacheRoot(), name);
