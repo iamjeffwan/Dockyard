@@ -870,20 +870,70 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
-  font-size: 16px;
+  min-width: 0;
+  font-size: 15px;
 }
-.storybook-panel-heading select {
+.storybook-panel-header {
+  display: grid;
   width: 100%;
+  gap: 9px;
+}
+.storybook-panel-heading strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storybook-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--color-border-default);
+  border-radius: 7px;
+  color: var(--color-accent-primary);
+  background: var(--color-surface-low);
+  font-size: 12px;
+  font-weight: 750;
+}
+.storybook-panel-header select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
   border: 1px solid var(--color-border-default);
   border-radius: 6px;
-  padding: 6px 8px;
   background: var(--color-surface);
   color: var(--color-text);
 }
-.storybook-panel-body { display: grid; gap: 8px; padding: 0 12px 12px; }
+.storybook-panel-body { display: grid; min-width: 0; gap: 10px; padding: 0 12px 12px; }
+.storybook-search {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+}
+.storybook-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: var(--color-text-primary);
+  background: transparent;
+  font-size: 12px;
+}
 .storybook-status { color: var(--color-text-muted); font-size: 11px; }
-.storybook-groups { max-height: 330px; overflow-y: auto; display: grid; gap: 10px; }
+.storybook-groups { min-height: 0; max-height: 330px; overflow-y: auto; display: grid; gap: 10px; padding-right: 3px; }
 .storybook-group { display: grid; gap: 2px; }
 .storybook-group h3 { margin: 4px 6px; color: var(--color-text-muted); font-size: 11px; font-weight: 650; }
 .storybook-group button { display: flex; align-items: center; gap: 6px; border: 0; border-radius: 5px; padding: 6px; background: transparent; color: var(--color-text); text-align: left; cursor: grab; font-size: 11px; }

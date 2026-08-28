@@ -343,10 +343,12 @@ function StorybookSidebar({
       <Sidebar.Tabs>
         <Sidebar.Tab tab="stories">
           <Sidebar.Header>
-            <div className="storybook-panel-heading"><span className="storybook-mark">S</span><strong>组件 Stories</strong></div>
-            <select aria-label="组件来源" value={sourceId} onChange={(event) => setSourceId(event.target.value)}>
-              {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
-            </select>
+            <div className="storybook-panel-header">
+              <div className="storybook-panel-heading"><span className="storybook-mark">S</span><strong>组件 Stories</strong></div>
+              <select aria-label="组件来源" value={sourceId} onChange={(event) => setSourceId(event.target.value)}>
+                {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
+              </select>
+            </div>
           </Sidebar.Header>
           <div className="storybook-panel-body">
             <label className="storybook-search"><Search size={13} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="查找组件或故事" /></label>
