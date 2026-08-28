@@ -249,7 +249,8 @@ function loadWorkspace() {
     ? index.currentProjectPath
     : null;
   if (currentProjectPath) {
-    const projectSaved = readJson<any>(projectWorkspacePath(currentProjectPath));
+    const designPath = projectWorkspacePath(currentProjectPath);
+    const projectSaved = readJson<any>(designPath);
     if (projectSaved) {
       try {
         const metadata = readJson<any>(projectMetadataPath(currentProjectPath));
@@ -271,6 +272,8 @@ function loadWorkspace() {
         workspaceLoadError =
           error instanceof Error ? error.message : "工作区读取失败";
       }
+    } else if (existsSync(designPath)) {
+      workspaceLoadError = `工作区文件无法读取：${designPath}`;
     }
     currentProjectPath = null;
   }
@@ -492,6 +495,10 @@ function relinkProject(previousPath: string, projectPath: string) {
     return { ok: false, error: "缺少原工作区标识，不能安全地重新定位" };
   try {
     validateWorkspaceDocuments(saved, metadata, expectedId);
+    hydrateWorkspace(
+      JSON.parse(JSON.stringify(saved)),
+      ensureProjectDirs(targetPath),
+    );
   } catch (error) {
     return {
       ok: false,

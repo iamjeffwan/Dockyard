@@ -906,19 +906,26 @@ function AnnotatorView() {
   const generateContext = async () => {
     if (!artwork || !contextProject) return;
     setGeneratingContext(true);
-    const saved = await saveNow(true);
-    if (!saved?.ok) {
-      setContextResult({ ok: false, error: "保存失败，未生成开发上下文" });
+    try {
+      const saved = await saveNow(true);
+      if (!saved?.ok) {
+        setContextResult({ ok: false, error: "保存失败，未生成开发上下文" });
+        return;
+      }
+      const result = await window.dockyard?.generateContext({
+        artworkId: artwork.id,
+        prompt: contextPrompt,
+      });
+      setContextResult(result || { ok: false, error: "生成失败" });
+      if (result?.ok) setStatus("开发上下文已生成");
+    } catch (error) {
+      setContextResult({
+        ok: false,
+        error: error instanceof Error ? error.message : "生成失败",
+      });
+    } finally {
       setGeneratingContext(false);
-      return;
     }
-    const result = await window.dockyard?.generateContext({
-      artworkId: artwork.id,
-      prompt: contextPrompt,
-    });
-    setContextResult(result || { ok: false, error: "生成失败" });
-    setGeneratingContext(false);
-    if (result?.ok) setStatus("开发上下文已生成");
   };
   const dropCandidate = (
     candidate: Candidate,
