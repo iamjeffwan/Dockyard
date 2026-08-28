@@ -509,6 +509,10 @@ function BarView() {
     await refreshProjectStatus();
   };
   const chooseProject = async () => {
+    if (!window.dockyard?.pickProject) {
+      window.alert("请在 Dockyard 桌面窗口中选择项目");
+      return;
+    }
     const selected = await window.dockyard?.pickProject?.();
     if (!selected) return;
     if (projectStatus.missingCurrent) {
