@@ -1016,6 +1016,19 @@ const storybookMatchSchema = {
     },
   },
 };
+const storybookQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["terms"],
+  properties: {
+    terms: {
+      type: "array",
+      minItems: 1,
+      maxItems: 8,
+      items: { type: "string", minLength: 2, maxLength: 40 },
+    },
+  },
+};
 async function runStorybookSearch(
   payload: { sketchDataUrl?: string; sourceIds?: string[] },
   onTrace?: (event: CodexCliTraceEvent) => void,
@@ -1054,19 +1067,31 @@ async function runStorybookSearch(
       .slice(0, 24);
     const sketchPath = join(candidateCacheRoot(), `${key}.storybook.sketch.png`);
     dataUrlToFile(payload.sketchDataUrl, sketchPath);
-    trace(`已读取 ${candidatesBySource.reduce((sum, item) => sum + item.candidates.length, 0)} 个原始目录候选`);
-    const selections = await Promise.all(candidatesBySource.map(async ({ catalog, candidates }) => {
-      trace(`开始判断来源：${catalog.source.name}（${candidates.length} 个目录）`);
-      const selection = await runCodexJson<{ matches: Array<{ sourceId: string; path: string }> }>(
-        "storybook-selection",
-        `查看附图草图。从“${catalog.source.name}”的下列原始目录中，以高召回率选择所有可能相关的目录。输入框的不同功能变体也要纳入，例如 text input、password input、number input、search input、textarea、select、multiple input 等；不要只选择名称恰好等于 Input 的目录。不要改写、翻译或合并 path；只能原样返回 sourceId 和 path。若没有匹配项，返回空数组。候选目录：${JSON.stringify(candidates)}`,
-        storybookMatchSchema,
-        sketchPath,
-        onTrace,
-      );
-      return { catalog, selection };
-    }));
-    const matches = selections.flatMap(({ catalog, selection }) => (selection.matches || []).map((item) => {
+    const allCandidates = candidatesBySource.flatMap((item) => item.candidates);
+    trace(`已读取 ${allCandidates.length} 个原始目录候选`);
+    const queryPlan = await runCodexJson<{ terms: string[] }>(
+      "storybook-query-terms",
+      "查看附图草图，只生成用于检索 Storybook 原始目录的英文功能词。请覆盖同一功能的常见变体，例如 input、text input、password input、number input、search input、textarea、select、form field。只返回 terms 数组，不要返回目录、解释或代码。",
+      storybookQuerySchema,
+      sketchPath,
+      onTrace,
+    );
+    const terms = [...new Set((queryPlan.terms || []).map((term) => term.trim().toLowerCase()).filter(Boolean))];
+    trace(`模型生成检索词：${terms.join("、")}`);
+    const expandedCandidates = allCandidates.filter((candidate) => {
+      const haystack = `${candidate.path} ${candidate.stories.join(" ")}`.toLowerCase();
+      return terms.some((term) => term.split(/\s+/).every((token) => haystack.includes(token)));
+    });
+    const shortlist = expandedCandidates.length ? expandedCandidates : allCandidates;
+    trace(`本地候选扩展后保留 ${shortlist.length} 个目录`);
+    const selection = await runCodexJson<{ matches: Array<{ sourceId: string; path: string }> }>(
+      "storybook-selection",
+      `查看附图草图。从下列不同 Storybook 的原始目录中，以高召回率选择所有可能相关的目录。输入框的不同功能变体也要纳入，不要只选择名称恰好等于 Input 的目录。不要改写、翻译或合并 path；只能原样返回 sourceId 和 path。若没有匹配项，返回空数组。候选目录：${JSON.stringify(shortlist)}`,
+      storybookMatchSchema,
+      sketchPath,
+      onTrace,
+    );
+    const matches = (selection.matches || []).map((item) => {
       const source = storybookSource(item.sourceId);
       if (!source) {
         diagnostics.push(`未找到来源：${item.sourceId} / ${item.path}`);
@@ -1079,7 +1104,7 @@ async function runStorybookSearch(
         return { sourceId: item.sourceId, path: item.path, stories: [], status: "path-not-found" as const };
       }
       return { sourceId: item.sourceId, path: item.path, stories, status: "matched" as const };
-    }))
+    })
       .filter((item, index, all) => all.findIndex((candidate) => candidate.sourceId === item.sourceId && candidate.path === item.path) === index);
     trace(`模型返回 ${matches.length} 条目录判断`);
     return { matches, source: "codex" as const, diagnostics };
