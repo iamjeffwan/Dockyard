@@ -803,6 +803,7 @@ function SceneCanvas({
 
 function AnnotatorView() {
   const { workspace, update } = useWorkspace();
+  const { status: projectStatus } = useProjectStatus();
   const [status, setStatus] = useState("");
   const [artworkPickerOpen, setArtworkPickerOpen] = useState(false);
   const [saveSummary, setSaveSummary] = useState<{
@@ -889,11 +890,7 @@ function AnnotatorView() {
     setArtworkPickerOpen(false);
   };
   const openContextDialog = () => {
-    const project =
-      workspace.recentProjects.find(
-        (item) => item.path === artwork?.lastProjectPath,
-      ) || workspace.recentProjects.at(-1) || null;
-    setContextProject(project);
+    setContextProject(projectStatus.current);
     setContextPrompt(
       artwork
         ? `请根据 .dockyard/context/${artwork.id}/latest 中的图稿、标注和已采用组件实现本次界面。`
@@ -901,25 +898,6 @@ function AnnotatorView() {
     );
     setContextResult(null);
     setContextOpen(true);
-  };
-  const chooseContextProject = async () => {
-    if (!artwork) return;
-    const selected = await window.dockyard?.pickProject();
-    if (!selected) return;
-    const project: ProjectRef = { ...selected, lastUsedAt: now() };
-    setContextProject(project);
-    update((current) => ({
-      ...current,
-      recentProjects: [
-        ...current.recentProjects.filter((item) => item.path !== project.path),
-        project,
-      ],
-      artworks: current.artworks.map((item) =>
-        item.id === artwork.id
-          ? { ...item, lastProjectPath: project.path }
-          : item,
-      ),
-    }));
   };
   const generateContext = async () => {
     if (!artwork || !contextProject) return;
@@ -931,7 +909,6 @@ function AnnotatorView() {
       return;
     }
     const result = await window.dockyard?.generateContext({
-      projectPath: contextProject.path,
       artworkId: artwork.id,
       prompt: contextPrompt,
     });
@@ -1159,12 +1136,9 @@ function AnnotatorView() {
           <p>将当前图稿、标注、组件与提示词写入所选代码项目。</p>
           <div className="context-project-row">
             <div>
-              <small>目标代码项目</small>
+              <small>当前代码项目</small>
               <strong>{contextProject?.name || "尚未选择"}</strong>
             </div>
-            <button type="button" onClick={() => void chooseContextProject()} autoFocus>
-              选择项目
-            </button>
           </div>
           <label className="field-label" htmlFor="development-context-prompt">
             开发提示词

@@ -253,6 +253,7 @@ function loadWorkspace() {
           ensureProjectDirs(currentProjectPath),
         );
         workspace.recentProjects = recentProjects;
+        workspace.windowState = index?.windowState || {};
         updateProjectIndex(currentProjectPath, recentProjects, workspace.id);
         workspaceLoadError = null;
         return workspace;
@@ -265,6 +266,7 @@ function loadWorkspace() {
   }
   const loaded = defaultWorkspace();
   loaded.recentProjects = recentProjects;
+  loaded.windowState = index?.windowState || {};
   workspace = loaded;
   atomicJson(indexPath(), {
     ...index,
@@ -280,6 +282,8 @@ function saveWorkspace(next: any) {
   const root = ensureProjectDirs(currentProjectPath);
   const persisted = JSON.parse(JSON.stringify(next));
   delete persisted.globalComponents;
+  delete persisted.recentProjects;
+  delete persisted.windowState;
   for (const artwork of persisted.artworks || []) {
     const actual = next.artworks.find((item: any) => item.id === artwork.id);
     const artworkRoot = resolveInsideWorkspace(root, `artworks/${artwork.id}`);
@@ -357,6 +361,7 @@ function saveWorkspace(next: any) {
     version: currentProjectPath ? 2 : 1,
     currentWorkspaceId: next.id,
     currentProjectPath: currentProjectPath || undefined,
+    windowState: next.windowState || index.windowState || {},
     lastOpenedAt: now(),
   });
   return { ok: true, path: join(root, "design.json") };
@@ -402,6 +407,7 @@ function openProject(projectPath: string) {
     workspace = hydrateWorkspace(saved, ensureProjectDirs(currentProjectPath));
     workspaceLoadError = null;
     const index = readJson<any>(indexPath()) || {};
+    workspace.windowState = index.windowState || {};
     workspace.recentProjects = updateProjectIndex(
       currentProjectPath,
       index.recentProjects || [],
@@ -439,6 +445,7 @@ function createProjectWorkspace(projectPath: string) {
     const index = readJson<any>(indexPath()) || {};
     const next: any = defaultWorkspace();
     next.name = basename(currentProjectPath);
+    next.windowState = index.windowState || {};
     next.recentProjects = updateProjectIndex(
       currentProjectPath,
       index.recentProjects || [],
@@ -636,6 +643,12 @@ function createBarWindow() {
     if (workspace && barWindow) {
       const [x, y] = barWindow.getPosition();
       workspace.windowState = { ...workspace.windowState, bar: { x, y } };
+      const index = readJson<any>(indexPath()) || {};
+      atomicJson(indexPath(), {
+        ...index,
+        version: 2,
+        windowState: workspace.windowState,
+      });
     }
   });
   barWindow.on("closed", () => {
@@ -1194,16 +1207,17 @@ async function runCodex(payload: {
   }
 }
 async function generateContext(payload: {
-  projectPath: string;
   artworkId: string;
   prompt: string;
 }) {
+  if (!currentProjectPath) throw new Error("请先选择代码项目");
   const artwork = workspace?.artworks?.find(
     (item: any) => item.id === payload.artworkId,
   );
   if (!artwork) throw new Error("当前图稿不存在");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const base = join(payload.projectPath, ".dockyard", "context", artwork.id);
+  const root = ensureProjectDirs(currentProjectPath);
+  const base = resolveInsideWorkspace(root, `context/${artwork.id}`);
   const dir = join(base, stamp);
   mkdirSync(dir, { recursive: true });
   const latest = join(base, "latest");
