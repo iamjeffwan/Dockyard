@@ -880,3 +880,4 @@ textarea:focus {
 .storybook-overlay-handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
 .storybook-overlay-handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
 .storybook-overlay-rotate { position: absolute; left: 50%; top: -26px; width: 12px; height: 12px; margin-left: -6px; border: 1px solid #2563eb; background: #fff; border-radius: 50%; cursor: grab; z-index: 2; }
+.storybook-overlay-unavailable { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; color: #64748b; background: #f8fafc; font-size: 12px; text-align: center; }
