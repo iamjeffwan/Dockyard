@@ -1030,36 +1030,43 @@ async function runStorybookSearch(
     const sourceIds = [...new Set(payload.sourceIds || [])].filter((id) => storybookSource(id));
     if (!sourceIds.length) throw new Error("没有选择 Storybook 来源");
     const catalogs = await Promise.all(sourceIds.map((id) => loadStorybookCatalog(id)));
-    const candidates = catalogs.flatMap((catalog) => {
+    const candidatesBySource = catalogs.map((catalog) => {
       const groups = new Map<string, string[]>();
       for (const story of catalog.stories) {
         const names = groups.get(story.title) || [];
         names.push(story.name);
         groups.set(story.title, names);
       }
-      return [...groups].map(([path, stories]) => ({
-        sourceId: catalog.source.id,
-        sourceName: catalog.source.name,
-        path,
-        stories,
-      }));
-    });
-    if (!candidates.length) throw new Error("所选 Storybook 没有可用目录");
+      return {
+        catalog,
+        candidates: [...groups].map(([path, stories]) => ({
+          sourceId: catalog.source.id,
+          sourceName: catalog.source.name,
+          path,
+          stories,
+        })),
+      };
+    }).filter((item) => item.candidates.length > 0);
+    if (!candidatesBySource.length) throw new Error("所选 Storybook 没有可用目录");
     const key = createHash("sha256")
       .update(JSON.stringify({ sourceIds, sketchDataUrl: payload.sketchDataUrl }))
       .digest("hex")
       .slice(0, 24);
     const sketchPath = join(candidateCacheRoot(), `${key}.storybook.sketch.png`);
     dataUrlToFile(payload.sketchDataUrl, sketchPath);
-    trace(`已读取 ${candidates.length} 个原始目录候选`);
-    const selection = await runCodexJson<{ matches: Array<{ sourceId: string; path: string }> }>(
-      "storybook-selection",
-      `查看附图草图。从下列 Storybook 原始目录中选择所有可能匹配的目录。不要改写、翻译或合并 path；只能原样返回 sourceId 和 path。若没有匹配项，返回空数组。候选目录：${JSON.stringify(candidates)}`,
-      storybookMatchSchema,
-      sketchPath,
-      onTrace,
-    );
-    const matches = (selection.matches || []).map((item) => {
+    trace(`已读取 ${candidatesBySource.reduce((sum, item) => sum + item.candidates.length, 0)} 个原始目录候选`);
+    const selections = await Promise.all(candidatesBySource.map(async ({ catalog, candidates }) => {
+      trace(`开始判断来源：${catalog.source.name}（${candidates.length} 个目录）`);
+      const selection = await runCodexJson<{ matches: Array<{ sourceId: string; path: string }> }>(
+        "storybook-selection",
+        `查看附图草图。从“${catalog.source.name}”的下列原始目录中，以高召回率选择所有可能相关的目录。输入框的不同功能变体也要纳入，例如 text input、password input、number input、search input、textarea、select、multiple input 等；不要只选择名称恰好等于 Input 的目录。不要改写、翻译或合并 path；只能原样返回 sourceId 和 path。若没有匹配项，返回空数组。候选目录：${JSON.stringify(candidates)}`,
+        storybookMatchSchema,
+        sketchPath,
+        onTrace,
+      );
+      return { catalog, selection };
+    }));
+    const matches = selections.flatMap(({ catalog, selection }) => (selection.matches || []).map((item) => {
       const source = storybookSource(item.sourceId);
       if (!source) {
         diagnostics.push(`未找到来源：${item.sourceId} / ${item.path}`);
@@ -1072,7 +1079,8 @@ async function runStorybookSearch(
         return { sourceId: item.sourceId, path: item.path, stories: [], status: "path-not-found" as const };
       }
       return { sourceId: item.sourceId, path: item.path, stories, status: "matched" as const };
-    });
+    }))
+      .filter((item, index, all) => all.findIndex((candidate) => candidate.sourceId === item.sourceId && candidate.path === item.path) === index);
     trace(`模型返回 ${matches.length} 条目录判断`);
     return { matches, source: "codex" as const, diagnostics };
   } catch (error) {
