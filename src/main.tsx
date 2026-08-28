@@ -480,6 +480,7 @@ function BarView() {
         className="bar-project"
         aria-label="当前代码项目"
         title={
+          projectStatus.error ||
           projectStatus.current?.path ||
           projectStatus.missingCurrent?.path ||
           "选择代码项目"
@@ -488,7 +489,11 @@ function BarView() {
         onChange={(event) => void chooseRecentProject(event.target.value)}
       >
         <option value="">
-          {projectStatus.missingCurrent ? "项目位置失效" : "选择项目"}
+          {projectStatus.error
+            ? "工作区读取失败"
+            : projectStatus.missingCurrent
+              ? "项目位置失效"
+              : "选择项目"}
         </option>
         {projectStatus.recent
           .filter((item) => item.available)

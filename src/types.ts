@@ -157,6 +157,7 @@ export type ProjectStatus = {
   missingCurrent: ProjectRef | null;
   recent: ProjectRef[];
   hasWorkspace: boolean;
+  error?: string;
 };
 
 export type Workspace = {

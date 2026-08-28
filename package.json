@@ -10,6 +10,7 @@
     "generate:tokens": "node scripts/generate-tokens.mjs",
     "test:codex-cli": "tsc -p tsconfig.electron.json && node --test test/codex-cli-model.test.mjs",
     "test:library-host": "tsc -p tsconfig.electron.json && node --test test/excalidraw-library-host.test.mjs test/external-navigation.test.mjs",
+    "test:workspace": "tsc -p tsconfig.electron.json && node --test test/workspace-files.test.mjs",
     "verify:artwork-open": "node scripts/verify-artwork-open.mjs",
     "verify:library-host": "node scripts/verify-library-host.mjs",
     "prototype:overlay:electron": "electron prototypes/excalidraw-component-overlay/electron-main.cjs",

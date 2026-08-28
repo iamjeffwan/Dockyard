@@ -9,7 +9,6 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -20,6 +19,11 @@ import {
   validateCodexCliConfig,
 } from "./codex-cli-model.js";
 import { classifyWindowOpen } from "./external-navigation.js";
+import {
+  atomicWriteJson as atomicJson,
+  readJsonFile as readJson,
+  resolveInsideWorkspace,
+} from "./workspace-files.js";
 import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types";
 
 const execFileAsync = promisify(execFile);
@@ -47,6 +51,7 @@ if (process.platform === "win32" && process.env.DOCKYARD_DISABLE_GPU !== "0") {
 
 let workspace: any = null;
 let currentProjectPath: string | null = null;
+let workspaceLoadError: string | null = null;
 let mcpHttpPort = 0;
 let barWindow: BrowserWindow | null = null;
 const panelWindows = new Map<View, BrowserWindow>();
@@ -144,12 +149,6 @@ function ensureProjectDirs(projectPath: string) {
     mkdirSync(join(root, dir), { recursive: true });
   return root;
 }
-function atomicJson(path: string, value: unknown) {
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2), "utf8");
-  renameSync(tmp, path);
-}
 function dataUrlToFile(dataUrl: string | undefined, filePath: string) {
   if (!dataUrl) return;
   const match = dataUrl.match(/^data:(.+?),(.*)$/);
@@ -172,14 +171,6 @@ function fileToDataUrl(path: string) {
         ? "image/webp"
         : "image/png";
   return `data:${mime};base64,${readFileSync(path).toString("base64")}`;
-}
-function readJson<T>(path: string): T | null {
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as T;
-  } catch {
-    return null;
-  }
 }
 function defaultScene() {
   return {
@@ -212,7 +203,10 @@ function loadGlobalComponents() {
   for (const item of items)
     if (item.previewPath)
       item.previewDataUrl = fileToDataUrl(
-        join(dataRoot(), "global-components", item.previewPath),
+        resolveInsideWorkspace(
+          join(dataRoot(), "global-components"),
+          item.previewPath,
+        ),
       );
   return items;
 }
@@ -220,19 +214,24 @@ function hydrateWorkspace(loaded: any, root: string) {
   loaded.libraryItems ||= [];
   loaded.globalComponents = loadGlobalComponents();
   for (const artwork of loaded.artworks || []) {
-    const artworkRoot = join(root, "artworks", artwork.id);
+    const scenePath = resolveInsideWorkspace(
+      root,
+      artwork.scenePath || `artworks/${artwork.id}/scene.excalidraw.json`,
+    );
     artwork.scene =
-      readJson<any>(join(artworkRoot, "scene.excalidraw.json")) ||
+      readJson<any>(scenePath) ||
         artwork.scene ||
         defaultScene();
     for (const file of Object.values<any>(artwork.scene.files || {}))
       if (file.path)
-        file.dataURL = fileToDataUrl(join(root, file.path));
+        file.dataURL = fileToDataUrl(resolveInsideWorkspace(root, file.path));
     if (artwork.source?.path)
-      artwork.source.dataUrl = fileToDataUrl(join(root, artwork.source.path));
+      artwork.source.dataUrl = fileToDataUrl(
+        resolveInsideWorkspace(root, artwork.source.path),
+      );
     if (artwork.previewPath)
       artwork.annotatedPreviewDataUrl = fileToDataUrl(
-        join(root, artwork.previewPath),
+        resolveInsideWorkspace(root, artwork.previewPath),
       );
   }
   return loaded;
@@ -248,10 +247,19 @@ function loadWorkspace() {
   if (currentProjectPath) {
     const projectSaved = readJson<any>(projectWorkspacePath(currentProjectPath));
     if (projectSaved) {
-      workspace = hydrateWorkspace(projectSaved, ensureProjectDirs(currentProjectPath));
-      workspace.recentProjects = recentProjects;
-      updateProjectIndex(currentProjectPath, recentProjects, workspace.id);
-      return workspace;
+      try {
+        workspace = hydrateWorkspace(
+          projectSaved,
+          ensureProjectDirs(currentProjectPath),
+        );
+        workspace.recentProjects = recentProjects;
+        updateProjectIndex(currentProjectPath, recentProjects, workspace.id);
+        workspaceLoadError = null;
+        return workspace;
+      } catch (error) {
+        workspaceLoadError =
+          error instanceof Error ? error.message : "工作区读取失败";
+      }
     }
     currentProjectPath = null;
   }
@@ -274,7 +282,7 @@ function saveWorkspace(next: any) {
   delete persisted.globalComponents;
   for (const artwork of persisted.artworks || []) {
     const actual = next.artworks.find((item: any) => item.id === artwork.id);
-    const artworkRoot = join(root, "artworks", artwork.id);
+    const artworkRoot = resolveInsideWorkspace(root, `artworks/${artwork.id}`);
     mkdirSync(artworkRoot, { recursive: true });
     const scene = JSON.parse(JSON.stringify(actual.scene || defaultScene()));
     for (const [fileId, file] of Object.entries<any>(scene.files || {})) {
@@ -284,7 +292,7 @@ function saveWorkspace(next: any) {
       const relative = isSource
         ? `assets/source/${fileId}.png`
         : `assets/components/${fileId}.${extension}`;
-      dataUrlToFile(file.dataURL, join(root, relative));
+      dataUrlToFile(file.dataURL, resolveInsideWorkspace(root, relative));
       delete file.dataURL;
       file.path = relative;
     }
@@ -293,7 +301,10 @@ function saveWorkspace(next: any) {
     artwork.scenePath = `artworks/${artwork.id}/scene.excalidraw.json`;
     if (actual.source?.dataUrl && actual.source.hash) {
       const sourcePath = `assets/source/${actual.source.hash}.png`;
-      dataUrlToFile(actual.source.dataUrl, join(root, sourcePath));
+      dataUrlToFile(
+        actual.source.dataUrl,
+        resolveInsideWorkspace(root, sourcePath),
+      );
       artwork.source = {
         ...artwork.source,
         dataUrl: undefined,
@@ -303,7 +314,10 @@ function saveWorkspace(next: any) {
     }
     if (actual.annotatedPreviewDataUrl) {
       const previewPath = `assets/previews/${actual.id}.png`;
-      dataUrlToFile(actual.annotatedPreviewDataUrl, join(root, previewPath));
+      dataUrlToFile(
+        actual.annotatedPreviewDataUrl,
+        resolveInsideWorkspace(root, previewPath),
+      );
       artwork.previewPath = previewPath;
       delete artwork.annotatedPreviewDataUrl;
     }
@@ -324,10 +338,10 @@ function saveWorkspace(next: any) {
         ? "svg"
         : "png";
       const relative = `${copy.globalId}.${extension}`;
-      dataUrlToFile(
-        copy.previewDataUrl,
-        join(dataRoot(), "global-components", relative),
-      );
+      dataUrlToFile(copy.previewDataUrl, resolveInsideWorkspace(
+        join(dataRoot(), "global-components"),
+        relative,
+      ));
       delete copy.previewDataUrl;
       copy.previewPath = relative;
     }
@@ -367,6 +381,7 @@ function projectStatus() {
     missingCurrent,
     recent,
     hasWorkspace: Boolean(current && existsSync(projectWorkspacePath(current.path))),
+    error: workspaceLoadError || undefined,
   };
 }
 function openProject(projectPath: string) {
@@ -385,6 +400,7 @@ function openProject(projectPath: string) {
     }
     currentProjectPath = targetPath;
     workspace = hydrateWorkspace(saved, ensureProjectDirs(currentProjectPath));
+    workspaceLoadError = null;
     const index = readJson<any>(indexPath()) || {};
     workspace.recentProjects = updateProjectIndex(
       currentProjectPath,
