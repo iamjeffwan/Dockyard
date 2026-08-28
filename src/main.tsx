@@ -251,6 +251,22 @@ function useWorkspace() {
     canRedo: Boolean(future.length),
   };
 }
+function useProjectStatus() {
+  const [status, setStatus] = useState<import("./types").ProjectStatus>({
+    current: null,
+    recent: [],
+    hasWorkspace: false,
+  });
+  const refresh = useCallback(async () => {
+    const next = await window.dockyard?.projectStatus?.();
+    if (next) setStatus(next);
+    return next;
+  }, []);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  return { status, refresh };
+}
 function openPanel(
   view: "annotator" | "component-search" | "tokens" | "decisions",
 ) {
@@ -404,7 +420,26 @@ function importArtwork(
 }
 function BarView() {
   const { workspace, update } = useWorkspace();
+  const { status: projectStatus, refresh: refreshProjectStatus } = useProjectStatus();
   const artwork = activeArtwork(workspace);
+  const chooseProject = async () => {
+    const selected = await window.dockyard?.pickProject?.();
+    if (!selected) return;
+    const opened = await window.dockyard?.openProject?.(selected.path);
+    if (!opened?.ok) {
+      window.alert(opened?.error || "项目打开失败");
+      return;
+    }
+    if (opened.needsCreation) {
+      if (!window.confirm(`项目“${selected.name}”还没有 Dockyard 工作区，是否创建？`)) return;
+      const created = await window.dockyard?.createProjectWorkspace?.(selected.path);
+      if (!created?.ok) {
+        window.alert(created?.error || "工作区创建失败");
+        return;
+      }
+    }
+    await refreshProjectStatus();
+  };
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) =>
       importArtwork(
@@ -419,6 +454,15 @@ function BarView() {
   return (
     <div className="bar-shell">
       <div className="bar-drag-handle" aria-hidden="true" />
+      <button
+        className="bar-project"
+        type="button"
+        title={projectStatus.current?.path || "选择代码项目"}
+        onClick={() => void chooseProject()}
+      >
+        <FolderOpen size={16} />
+        <span>{projectStatus.current?.name || "选择项目"}</span>
+      </button>
       <button
         className="bar-context active"
         onClick={() => openPanel("annotator")}

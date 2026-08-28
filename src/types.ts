@@ -146,6 +146,12 @@ export type Artwork = {
 
 export type ProjectRef = { path: string; name: string; lastUsedAt: string };
 
+export type ProjectStatus = {
+  current: ProjectRef | null;
+  recent: ProjectRef[];
+  hasWorkspace: boolean;
+};
+
 export type Workspace = {
   version: 2;
   id: string;

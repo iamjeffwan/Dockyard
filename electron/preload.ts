@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld("dockyard", {
   generateContext: (payload: unknown) =>
     ipcRenderer.invoke("context:generate", payload),
   pickProject: () => ipcRenderer.invoke("project:pick"),
+  projectStatus: () => ipcRenderer.invoke("project:status"),
+  openProject: (path: string) => ipcRenderer.invoke("project:open", path),
+  createProjectWorkspace: (path: string) =>
+    ipcRenderer.invoke("project:create-workspace", path),
   openContext: (path: string) => ipcRenderer.invoke("context:open", path),
   syncDesign: (workspace: unknown) =>
     ipcRenderer.send("design:sync", workspace),

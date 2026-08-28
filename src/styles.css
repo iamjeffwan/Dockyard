@@ -115,6 +115,30 @@ select:focus-visible {
   background: transparent;
   font-size: var(--typography-size-sm);
 }
+.bar-project {
+  max-width: 132px;
+  height: 32px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--shape-radius-control);
+  color: var(--color-text-primary);
+  background: var(--color-surface-raised);
+  font-size: var(--typography-size-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bar-project:hover {
+  border-color: var(--color-accent-primary);
+  color: var(--color-accent-primary);
+}
+.bar-project span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .bar-context:hover {
   background: var(--color-surface-raised);
   color: var(--color-text-primary);
