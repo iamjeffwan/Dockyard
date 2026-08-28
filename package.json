@@ -13,6 +13,7 @@
     "test:workspace": "tsc -p tsconfig.electron.json && node --test test/workspace-files.test.mjs",
     "test:dev-processes": "node --test test/dev-processes.test.mjs",
     "verify:artwork-open": "node scripts/verify-artwork-open.mjs",
+    "verify:project-picker": "node scripts/verify-project-picker.mjs",
     "verify:library-host": "node scripts/verify-library-host.mjs",
     "prototype:overlay:electron": "electron prototypes/excalidraw-component-overlay/electron-main.cjs",
     "build": "pnpm run generate:tokens && tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",

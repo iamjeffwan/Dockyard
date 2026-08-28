@@ -478,36 +478,48 @@ function BarView() {
   return (
     <div className="bar-shell">
       <div className="bar-drag-handle" aria-hidden="true" />
-      <select
-        className="bar-project"
-        aria-label="当前代码项目"
-        title={
-          projectStatus.error ||
-          projectStatus.current?.path ||
-          projectStatus.missingCurrent?.path ||
-          "选择代码项目"
-        }
-        value={projectStatus.current?.path || ""}
-        onChange={(event) => void chooseRecentProject(event.target.value)}
-      >
-        <option value="">
-          {projectStatus.error
-            ? "工作区读取失败"
-            : projectStatus.missingCurrent
-              ? "项目位置失效"
-              : "选择项目"}
-        </option>
-        {projectStatus.recent
-          .filter((item) => item.available)
-          .map((item) => (
-            <option key={item.path} value={item.path}>
-              {item.name}
-            </option>
-          ))}
-        <option value="__browse__">
-          {projectStatus.missingCurrent ? "重新定位项目…" : "选择其他项目…"}
-        </option>
-      </select>
+      {projectStatus.current || projectStatus.missingCurrent ? (
+        <select
+          className="bar-project"
+          aria-label="当前代码项目"
+          title={
+            projectStatus.error ||
+            projectStatus.current?.path ||
+            projectStatus.missingCurrent?.path ||
+            "选择代码项目"
+          }
+          value={projectStatus.current?.path || ""}
+          onChange={(event) => void chooseRecentProject(event.target.value)}
+        >
+          <option value="">
+            {projectStatus.error
+              ? "工作区读取失败"
+              : projectStatus.missingCurrent
+                ? "项目位置失效"
+                : "选择项目"}
+          </option>
+          {projectStatus.recent
+            .filter((item) => item.available)
+            .map((item) => (
+              <option key={item.path} value={item.path}>
+                {item.name}
+              </option>
+            ))}
+          <option value="__browse__">
+            {projectStatus.missingCurrent ? "重新定位项目…" : "选择其他项目…"}
+          </option>
+        </select>
+      ) : (
+        <button
+          type="button"
+          className="bar-project"
+          aria-label="选择当前代码项目"
+          title={projectStatus.error || "选择代码项目"}
+          onClick={() => void chooseProject()}
+        >
+          {projectStatus.error ? "工作区读取失败" : "选择项目"}
+        </button>
+      )}
       <button
         className="bar-context active"
         disabled={!projectStatus.current}
