@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import type {
   CacheStatus,
   CodexTraceEvent,
@@ -22,12 +24,9 @@ declare global {
       openCodexLogs: () => Promise<string>;
       componentCacheStatus: () => Promise<CacheStatus>;
       clearComponentCache: () => Promise<CacheStatus>;
-      generateContext: (
-        payload: unknown,
-      ) => Promise<{
+      completeArtwork: (payload: unknown) => Promise<{
         ok: boolean;
-        path?: string;
-        prompt?: string;
+        recordId?: string;
         error?: string;
       }>;
       pickProject: () => Promise<{ path: string; name: string } | null>;
@@ -45,7 +44,6 @@ declare global {
         ok: boolean;
         error?: string;
       }>;
-      openContext: (path: string) => Promise<void>;
       syncDesign: (workspace: Workspace) => void;
       openPanel: (
         view: "annotator" | "component-search" | "tokens" | "decisions",
@@ -56,7 +54,6 @@ declare global {
       showBar: () => Promise<void>;
       hideBar: () => Promise<void>;
       onDesignState: (listener: (workspace: Workspace) => void) => () => void;
-      mcpPort: () => Promise<number>;
       storybookSources: () => Promise<StorybookSource[]>;
       storybookCatalog: (sourceId: string) => Promise<StorybookCatalog>;
       storybookCheck: (sourceId: string) => Promise<StorybookSource>;
@@ -71,3 +68,8 @@ declare global {
 }
 
 export {};
+
+declare module "*.svg" {
+  const src: string;
+  export default src;
+}

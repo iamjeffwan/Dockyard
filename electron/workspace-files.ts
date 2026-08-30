@@ -34,7 +34,7 @@ export function validateWorkspaceDocuments(
   expectedId?: string,
 ) {
   const designRecord = design as { id?: unknown; version?: unknown } | null;
-  if (!designRecord || typeof designRecord.id !== "string" || designRecord.version !== 2)
+  if (!designRecord || typeof designRecord.id !== "string" || ![2, 3].includes(Number(designRecord.version)))
     throw new Error("design.json 不是有效的 Dockyard 工作区文件");
   const metadataRecord = metadata as { id?: unknown; version?: unknown } | null;
   if (metadata !== undefined) {

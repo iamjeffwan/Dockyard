@@ -17,8 +17,8 @@ contextBridge.exposeInMainWorld("dockyard", {
   openCodexLogs: () => ipcRenderer.invoke("codex:logs-open"),
   componentCacheStatus: () => ipcRenderer.invoke("component-cache:status"),
   clearComponentCache: () => ipcRenderer.invoke("component-cache:clear"),
-  generateContext: (payload: unknown) =>
-    ipcRenderer.invoke("context:generate", payload),
+  completeArtwork: (payload: unknown) =>
+    ipcRenderer.invoke("artwork:complete", payload),
   pickProject: () => ipcRenderer.invoke("project:pick"),
   projectStatus: () => ipcRenderer.invoke("project:status"),
   openProject: (path: string) => ipcRenderer.invoke("project:open", path),
@@ -26,10 +26,8 @@ contextBridge.exposeInMainWorld("dockyard", {
     ipcRenderer.invoke("project:relink", previousPath, path),
   createProjectWorkspace: (path: string) =>
     ipcRenderer.invoke("project:create-workspace", path),
-  openContext: (path: string) => ipcRenderer.invoke("context:open", path),
   syncDesign: (workspace: unknown) =>
     ipcRenderer.send("design:sync", workspace),
-  mcpPort: () => ipcRenderer.invoke("mcp:port"),
   storybookSources: () => ipcRenderer.invoke("storybook:sources"),
   storybookCatalog: (sourceId: string) =>
     ipcRenderer.invoke("storybook:catalog", sourceId),
