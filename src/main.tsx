@@ -459,6 +459,9 @@ function StorybookSidebar({
   const [storybookResult, setStorybookResult] = useState<StorybookSearchResult | null>(null);
   const [resizeHandleRect, setResizeHandleRect] = useState<{ left: number; top: number; height: number } | null>(null);
   const [sketchAnchorRect, setSketchAnchorRect] = useState<{ left: number; top: number; bottom: number; height: number } | null>(null);
+  const sketchCardRef = useRef<HTMLDivElement | null>(null);
+  const sketchPositionRaf = useRef<number | null>(null);
+  const pendingSketchPosition = useRef<{ left: number; top: number } | null>(null);
   const [searchSourceIds, setSearchSourceIds] = useState<string[]>([]);
   useEffect(() => {
     const request = window.dockyard?.storybookSources();
@@ -533,12 +536,15 @@ function StorybookSidebar({
       if (!sidebar) {
         setResizeHandleRect(null);
         setSketchAnchorRect(null);
+        document.body.classList.remove("storybook-sidebar-open");
         return;
       }
       const rect = sidebar.getBoundingClientRect();
+      const sidebarVisible = rect.width > 0 && rect.height > 0 && getComputedStyle(sidebar).visibility !== "hidden";
+      document.body.classList.toggle("storybook-sidebar-open", sidebarVisible);
       setResizeHandleRect({ left: rect.left, top: rect.top, height: rect.height });
       const sourceControl = sidebar.querySelector(".storybook-source-control");
-      const searchControl = sidebar.querySelector(".storybook-controls > .cds--search");
+      const searchControl = sidebar.querySelector(".storybook-search-row .cds--search");
       if (sourceControl instanceof HTMLElement && searchControl instanceof HTMLElement) {
         const sourceRect = sourceControl.getBoundingClientRect();
         const searchRect = searchControl.getBoundingClientRect();
@@ -555,19 +561,37 @@ function StorybookSidebar({
     return () => {
       mutationObserver.disconnect();
       resizeObserver.disconnect();
+      if (sketchPositionRaf.current !== null) {
+        window.cancelAnimationFrame(sketchPositionRaf.current);
+        sketchPositionRaf.current = null;
+      }
+      pendingSketchPosition.current = null;
+      document.body.classList.remove("storybook-sidebar-open");
       window.removeEventListener("resize", updateResizeHandle);
       window.removeEventListener("scroll", updateResizeHandle, true);
     };
+    }, []);
+  useEffect(() => {
+    const onPointerOver = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.closest(".sidebar__dock")) return;
+      window.setTimeout(() => {
+        document.querySelector(".excalidraw-tooltip")?.classList.remove("excalidraw-tooltip--visible");
+      }, 0);
+    };
+    document.addEventListener("pointerover", onPointerOver);
+    return () => document.removeEventListener("pointerover", onPointerOver);
   }, []);
   const sketchCard = sketchAnchorRect && createPortal(
     <div
+      ref={sketchCardRef}
       className="storybook-sketch-card storybook-sketch-card--floating is-open"
       data-prevent-outside-click
       style={{ left: `${sketchAnchorRect.left - 320}px`, top: `${sketchAnchorRect.top - 10}px` }}
     >
       <strong>涂鸦搜索</strong>
       <div className="storybook-sketch-preview">{sketchDataUrl ? <img src={sketchDataUrl} alt="当前草图选区" /> : "待从画稿获取选区"}</div>
-      <div className="storybook-sketch-actions"><Button kind="secondary" size="sm" onClick={() => void captureSketch()}>使用当前选区</Button><Button kind="ghost" size="sm" onClick={() => setSketchDataUrl(null)}>清除草图</Button></div>
+      <div className="storybook-sketch-actions"><Button kind="secondary" size="sm" onClick={() => void captureSketch()}><span className="storybook-sketch-action-label">使用当前选区</span></Button><Button kind="tertiary" size="sm" onClick={() => setSketchDataUrl(null)}><span className="storybook-sketch-action-label">清除草图</span></Button></div>
       <div className="storybook-multiselect-shell">
         <MultiSelect
           id="storybook-search-sources"
@@ -610,8 +634,30 @@ function StorybookSidebar({
           sidebar.style.width = `${nextWidth}px`;
           const nextRect = sidebar.getBoundingClientRect();
           handle.style.left = `${nextRect.left - 12}px`;
+          const sourceControl = sidebar.querySelector(".storybook-source-control");
+          const searchControl = sidebar.querySelector(".storybook-search-row .cds--search");
+          if (sourceControl instanceof HTMLElement && searchControl instanceof HTMLElement) {
+            const sourceRect = sourceControl.getBoundingClientRect();
+            const searchRect = searchControl.getBoundingClientRect();
+            pendingSketchPosition.current = { left: nextRect.left - 320, top: searchRect.top - 10 };
+            if (sketchPositionRaf.current === null) {
+              sketchPositionRaf.current = window.requestAnimationFrame(() => {
+                const position = pendingSketchPosition.current;
+                if (position && sketchCardRef.current) {
+                  sketchCardRef.current.style.left = `${position.left}px`;
+                  sketchCardRef.current.style.top = `${position.top}px`;
+                }
+                sketchPositionRaf.current = null;
+              });
+            }
+          }
         };
         const stop = () => {
+          if (sketchPositionRaf.current !== null) {
+            window.cancelAnimationFrame(sketchPositionRaf.current);
+            sketchPositionRaf.current = null;
+          }
+          pendingSketchPosition.current = null;
           handle.removeEventListener("pointermove", move);
           handle.removeEventListener("pointerup", stop);
           handle.removeEventListener("pointercancel", stop);
@@ -630,13 +676,10 @@ function StorybookSidebar({
     <>
       <Suspense fallback={null}>
       <LazySidebarShell>
-          <div className="storybook-panel-header">
-            <div className="storybook-panel-heading"><strong>组件 Stories</strong></div>
-          </div>
           <div className="storybook-panel-body">
             <div className="storybook-controls">
               <div className="storybook-search-row">
-                <IconButton className="storybook-doodle-search-button" label="涂鸦搜索" kind="ghost" size="sm" onClick={() => setSketchOpen((value) => !value)}>
+                <IconButton className="storybook-doodle-search-button" label="涂鸦搜索" align="bottom" kind="ghost" size="sm" onClick={() => setSketchOpen((value) => !value)}>
                   <img className="storybook-doodle-search-icon" src={scribbleLoopIcon} alt="" aria-hidden="true" />
                 </IconButton>
                 <CarbonSearch id="storybook-search" labelText="查找组件或故事" placeholder="查找组件或故事" value={query} onChange={(event) => setQuery(event.target.value)} size="sm" />
@@ -1091,6 +1134,7 @@ function SceneCanvas({
         langCode="zh-CN"
         theme="light"
         UIOptions={{
+          dockedSidebarBreakpoint: 0,
           canvasActions: {
             changeViewBackgroundColor: true,
             loadScene: false,

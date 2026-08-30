@@ -1,12 +1,16 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { MainMenu, Sidebar, useHandleLibrary } from "@excalidraw/excalidraw";
 import { Check, FileCode2, FolderOpen, Save, Send } from "lucide-react";
 
 export function StorybookSidebarShell({ children }: { children: ReactNode }) {
+  const [docked, setDocked] = useState(false);
   return (
-    <Sidebar name="dockyard-storybook" docked={false}>
+    <Sidebar name="dockyard-storybook" docked={docked} onDock={setDocked}>
       <Sidebar.Tabs>
         <Sidebar.Tab tab="stories">
+          <Sidebar.Header>
+            <div className="storybook-panel-heading"><strong>组件 Stories</strong></div>
+          </Sidebar.Header>
           {children}
         </Sidebar.Tab>
       </Sidebar.Tabs>
