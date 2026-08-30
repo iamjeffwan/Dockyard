@@ -3,20 +3,15 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  lazy,
+  Suspense,
   useState,
 } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import scribbleLoopIcon from "./assets/scribble-loop.svg";
 import { Button, DismissibleTag, IconButton, MultiSelect, Search as CarbonSearch, Select, SelectItem } from "@carbon/react";
-import {
-  Excalidraw,
-  MainMenu,
-  Sidebar,
-  convertToExcalidrawElements,
-  exportToBlob,
-  useHandleLibrary,
-} from "@excalidraw/excalidraw";
+import { MainMenu } from "@excalidraw/excalidraw";
 import {
   Box,
   Check,
@@ -63,9 +58,106 @@ import "./carbon.scss";
 import "./styles.css";
 import projectTokenData from "../design/project-tokens.json";
 
+const LazyExcalidraw = lazy(async () => {
+  const module = await import("@excalidraw/excalidraw");
+  return { default: module.Excalidraw };
+});
+const LazySidebarShell = lazy(async () => {
+  const module = await import("./excalidraw-ui");
+  return { default: module.StorybookSidebarShell };
+});
+const LazySidebarTrigger = lazy(async () => {
+  const module = await import("./excalidraw-ui");
+  return { default: module.StorybookSidebarTrigger };
+});
+const LazyLibraryHandler = lazy(async () => {
+  const module = await import("./excalidraw-ui");
+  return { default: module.LibraryHandler };
+});
+
+function CanvasMainMenu({
+  hasArtwork,
+  onChooseArtwork,
+  onSave,
+  onExportDelivery,
+  onCopyComponents,
+  onComplete,
+}: {
+  hasArtwork: boolean;
+  onChooseArtwork: () => void;
+  onSave: () => void;
+  onExportDelivery: () => void;
+  onCopyComponents: () => void;
+  onComplete: () => void;
+}) {
+  return (
+    <MainMenu>
+      <MainMenu.Item icon={<FolderOpen size={16} />} onSelect={onChooseArtwork}>选择图稿</MainMenu.Item>
+      <MainMenu.DefaultItems.SaveAsImage />
+      <MainMenu.Separator />
+      <MainMenu.Item icon={<Save size={16} />} onSelect={onSave} disabled={!hasArtwork}>保存到 Dockyard</MainMenu.Item>
+      <MainMenu.Item icon={<Send size={16} />} onSelect={onExportDelivery} disabled={!hasArtwork}>导出开发素材</MainMenu.Item>
+      <MainMenu.Item icon={<FileCode2 size={16} />} onSelect={onCopyComponents} disabled={!hasArtwork}>复制组件信息</MainMenu.Item>
+      <MainMenu.Item icon={<Check size={16} />} onSelect={onComplete} disabled={!hasArtwork}>完成并记录</MainMenu.Item>
+      <MainMenu.Separator />
+      <MainMenu.DefaultItems.SearchMenu />
+      <MainMenu.DefaultItems.Help />
+      <MainMenu.DefaultItems.ClearCanvas />
+      <MainMenu.Separator />
+      <MainMenu.Group title="Excalidraw links"><MainMenu.DefaultItems.Socials /></MainMenu.Group>
+      <MainMenu.Separator />
+      <MainMenu.DefaultItems.ToggleTheme />
+      <MainMenu.DefaultItems.ChangeCanvasBackground />
+    </MainMenu>
+  );
+}
+
 const uid = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 const now = () => new Date().toISOString();
+function createImageElement(data: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fileId: string;
+  customData?: Record<string, unknown>;
+  locked?: boolean;
+}) {
+  const timestamp = Date.now();
+  return {
+    id: uid("image"),
+    type: "image",
+    x: data.x,
+    y: data.y,
+    width: data.width,
+    height: data.height,
+    angle: 0,
+    strokeColor: "transparent",
+    backgroundColor: "transparent",
+    fillStyle: "solid",
+    strokeWidth: 1,
+    strokeStyle: "solid",
+    roughness: 1,
+    opacity: 100,
+    groupIds: [],
+    frameId: null,
+    roundness: null,
+    seed: Math.floor(Math.random() * 2 ** 31),
+    version: 1,
+    versionNonce: Math.floor(Math.random() * 2 ** 31),
+    isDeleted: false,
+    boundElements: null,
+    updated: timestamp,
+    link: null,
+    locked: Boolean(data.locked),
+    fileId: data.fileId,
+    status: "saved",
+    scale: [1, 1],
+    crop: null,
+    customData: data.customData,
+  };
+}
 const nextComponentSequence = (components: ComponentInstance[]) => {
   const used = new Set(
     components
@@ -96,6 +188,7 @@ async function exportSelectedSketch(api: ExcalidrawImperativeAPI) {
   const selectedIds = appState.selectedElementIds || {};
   const elements = api.getSceneElements().filter((element) => selectedIds[element.id]);
   if (!elements.length) return null;
+  const { exportToBlob } = await import("@excalidraw/excalidraw");
   const blob = await exportToBlob({
     elements,
     appState: { ...appState, selectedElementIds: {} },
@@ -176,21 +269,15 @@ function ensureSourceScene(
     scene.elements.some((item) => item.customData?.dockyardType === "source")
   )
     return { ...scene, files };
-  const element = convertToExcalidrawElements([
-    {
-      type: "image",
-      x: 0,
-      y: 0,
-      width: source.width,
-      height: source.height,
-      fileId: source.hash,
-      status: "saved",
-      scale: [1, 1],
-      crop: null,
-      locked: true,
-      customData: { dockyardType: "source", assetHash: source.hash },
-    } as any,
-  ])[0];
+  const element = createImageElement({
+    x: 0,
+    y: 0,
+    width: source.width,
+    height: source.height,
+    fileId: source.hash,
+    locked: true,
+    customData: { dockyardType: "source", assetHash: source.hash },
+  });
   return {
     ...scene,
     elements: [element, ...scene.elements],
@@ -541,14 +628,11 @@ function StorybookSidebar({
   );
   return (
     <>
-      <Sidebar name="dockyard-storybook" docked={false}>
-      <Sidebar.Tabs>
-        <Sidebar.Tab tab="stories">
-          <Sidebar.Header>
-            <div className="storybook-panel-header">
-              <div className="storybook-panel-heading"><strong>组件 Stories</strong></div>
-            </div>
-          </Sidebar.Header>
+      <Suspense fallback={null}>
+      <LazySidebarShell>
+          <div className="storybook-panel-header">
+            <div className="storybook-panel-heading"><strong>组件 Stories</strong></div>
+          </div>
           <div className="storybook-panel-body">
             <div className="storybook-controls">
               <div className="storybook-search-row">
@@ -583,9 +667,8 @@ function StorybookSidebar({
               <div className="storybook-preview-meta"><span>{selectedSource?.name || "未选择来源"}</span><span>{selectedStory?.title || ""}</span></div>
             </div>
           </div>
-        </Sidebar.Tab>
-      </Sidebar.Tabs>
-      </Sidebar>
+      </LazySidebarShell>
+      </Suspense>
       {sketchOpen && sketchCard}
       {resizeHandle}
     </>
@@ -833,55 +916,6 @@ function CanvasDialog({
   );
 }
 
-function CanvasMainMenu({
-  hasArtwork,
-  onChooseArtwork,
-  onSave,
-  onExportDelivery,
-  onCopyComponents,
-  onComplete,
-}: {
-  hasArtwork: boolean;
-  onChooseArtwork: () => void;
-  onSave: () => void;
-  onExportDelivery: () => void;
-  onCopyComponents: () => void;
-  onComplete: () => void;
-}) {
-  return (
-    <MainMenu>
-      <MainMenu.Item icon={<FolderOpen size={16} />} onSelect={onChooseArtwork}>
-        选择图稿
-      </MainMenu.Item>
-      <MainMenu.DefaultItems.SaveAsImage />
-      <MainMenu.Separator />
-      <MainMenu.Item icon={<Save size={16} />} onSelect={onSave} disabled={!hasArtwork}>
-        保存到 Dockyard
-      </MainMenu.Item>
-      <MainMenu.Item icon={<Send size={16} />} onSelect={onExportDelivery} disabled={!hasArtwork}>
-        导出开发素材
-      </MainMenu.Item>
-      <MainMenu.Item icon={<FileCode2 size={16} />} onSelect={onCopyComponents} disabled={!hasArtwork}>
-        复制组件信息
-      </MainMenu.Item>
-      <MainMenu.Item icon={<Check size={16} />} onSelect={onComplete} disabled={!hasArtwork}>
-        完成并记录
-      </MainMenu.Item>
-      <MainMenu.Separator />
-      <MainMenu.DefaultItems.SearchMenu />
-      <MainMenu.DefaultItems.Help />
-      <MainMenu.DefaultItems.ClearCanvas />
-      <MainMenu.Separator />
-      <MainMenu.Group title="Excalidraw links">
-        <MainMenu.DefaultItems.Socials />
-      </MainMenu.Group>
-      <MainMenu.Separator />
-      <MainMenu.DefaultItems.ToggleTheme />
-      <MainMenu.DefaultItems.ChangeCanvasBackground />
-    </MainMenu>
-  );
-}
-
 function SceneCanvas({
   artwork,
   libraryItems,
@@ -933,7 +967,6 @@ function SceneCanvas({
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
   const [canvasAppState, setCanvasAppState] = useState<any>(scene.appState);
-  useHandleLibrary({ excalidrawAPI });
   const libraryReturnUrl = useMemo(() => excalidrawLibraryReturnUrl(), []);
   useEffect(() => {
     last.current = JSON.stringify(scene);
@@ -994,11 +1027,13 @@ function SceneCanvas({
       }}
     >
       <div className="excalidraw-grid" />
-      <Excalidraw
+      <Suspense fallback={null}><LazyLibraryHandler excalidrawAPI={excalidrawAPI} /></Suspense>
+      <Suspense fallback={<div className="excalidraw-loading" role="status">正在加载画布…</div>}>
+      <LazyExcalidraw
         key={artwork?.id || "dockyard-empty-canvas"}
         initialData={{ ...scene, libraryItems } as any}
         excalidrawAPI={setExcalidrawAPI}
-        renderTopRightUI={() => <Sidebar.Trigger name="dockyard-storybook" tab="stories" title="打开组件 Stories">组件 Stories</Sidebar.Trigger>}
+        renderTopRightUI={() => <Suspense fallback={null}><LazySidebarTrigger /></Suspense>}
         libraryReturnUrl={libraryReturnUrl}
         onLibraryChange={onLibraryChange}
         generateIdForFile={generateIdForFile}
@@ -1073,7 +1108,8 @@ function SceneCanvas({
           onCopyComponents={onCopyComponents}
           onComplete={onComplete}
         />
-      </Excalidraw>
+      </LazyExcalidraw>
+      </Suspense>
       <RemoteStoryOverlayLayer components={artwork?.components || []} appState={canvasAppState} onChange={(instanceId, patch) => updateArtwork((current) => ({ ...current, components: current.components.map((item) => item.instanceId === instanceId ? { ...item, ...patch } : item), updatedAt: now() }))} />
       {!artwork && (
         <div className="canvas-empty-callout" aria-hidden="true">
@@ -1255,26 +1291,20 @@ function AnnotatorView() {
       sequence: nextComponentSequence(artwork?.components || []),
       status: "confirmed",
     };
-    const element = convertToExcalidrawElements([
-      {
-        type: "image",
-        x: Math.max(0, event.clientX - rect.left - 160),
-        y: Math.max(0, event.clientY - rect.top - 90),
-        width: 320,
-        height: 180,
-        fileId: elementId,
-        status: "saved",
-        scale: [1, 1],
-        crop: null,
-        customData: {
-          dockyardType: "component",
-          componentId: item.instanceId,
-          componentSequence: item.sequence,
-          source: candidate.docsUrl,
-          previewKind: candidate.previewKind,
-        },
-      } as any,
-    ])[0];
+    const element = createImageElement({
+      x: Math.max(0, event.clientX - rect.left - 160),
+      y: Math.max(0, event.clientY - rect.top - 90),
+      width: 320,
+      height: 180,
+      fileId: elementId,
+      customData: {
+        dockyardType: "component",
+        componentId: item.instanceId,
+        componentSequence: item.sequence,
+        source: candidate.docsUrl,
+        previewKind: candidate.previewKind,
+      },
+    });
     updateArtwork((current) => ({
       ...current,
       components: [...current.components, item],
@@ -1560,25 +1590,19 @@ function ComponentSearchView() {
       elementId,
       status: "confirmed",
     };
-    const element = convertToExcalidrawElements([
-      {
-        type: "image",
-        x: 120,
-        y: 120,
-        width: 320,
-        height: 180,
-        fileId: elementId,
-        status: "saved",
-        scale: [1, 1],
-        crop: null,
-        customData: {
-          dockyardType: "component",
-          componentId: instance.instanceId,
-          source: candidate.docsUrl,
-          previewKind: candidate.previewKind,
-        },
-      } as any,
-    ])[0];
+    const element = createImageElement({
+      x: 120,
+      y: 120,
+      width: 320,
+      height: 180,
+      fileId: elementId,
+      customData: {
+        dockyardType: "component",
+        componentId: instance.instanceId,
+        source: candidate.docsUrl,
+        previewKind: candidate.previewKind,
+      },
+    });
     update((current) => ({
       ...current,
       artworks: current.artworks.map((item) =>
@@ -1627,7 +1651,8 @@ function ComponentSearchView() {
               </div>
             )}
             <div className="sketch-box">
-              <Excalidraw
+              <Suspense fallback={<div className="excalidraw-loading" role="status">正在加载画布…</div>}>
+              <LazyExcalidraw
                 initialData={emptyScene() as any}
                 langCode="zh-CN"
                 theme="light"
@@ -1640,6 +1665,7 @@ function ComponentSearchView() {
                   },
                 }}
               />
+              </Suspense>
             </div>
             <label className="field-label" htmlFor="component-instruction">
               检索说明
