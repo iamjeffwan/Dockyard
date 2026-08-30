@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { get as httpsGet } from "node:https";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -53,7 +52,6 @@ if (process.platform === "win32" && process.env.DOCKYARD_DISABLE_GPU !== "0") {
 let workspace: any = null;
 let currentProjectPath: string | null = null;
 let workspaceLoadError: string | null = null;
-let mcpHttpPort = 0;
 let barWindow: BrowserWindow | null = null;
 const panelWindows = new Map<View, BrowserWindow>();
 const candidateCacheDays = 14;
@@ -142,10 +140,11 @@ function ensureProjectDirs(projectPath: string) {
   const root = projectRoot(projectPath);
   for (const dir of [
     "artworks",
+    "drafts",
+    "records",
     "assets/source",
     "assets/previews",
     "assets/components",
-    "context",
   ])
     mkdirSync(join(root, dir), { recursive: true });
   const ignorePath = join(root, ".gitignore");
@@ -188,12 +187,13 @@ function defaultScene() {
 }
 function defaultWorkspace() {
   return {
-    version: 2,
+    version: 3,
     id: uid("workspace"),
     name: "未命名设计",
     updatedAt: now(),
     currentArtworkId: null,
     artworks: [],
+    bases: [],
     libraryItems: [],
     globalComponents: [],
     recentProjects: [],
@@ -216,14 +216,51 @@ function loadGlobalComponents() {
 }
 function hydrateWorkspace(loaded: any, root: string) {
   loaded.libraryItems ||= [];
+  loaded.bases ||= [];
+  // Migrate the previous single-artwork model into a base plus draft artwork.
+  for (const artwork of loaded.artworks || []) {
+    artwork.status ||= "draft";
+    artwork.createdAt ||= artwork.updatedAt || now();
+    if (!artwork.baseId) {
+      const baseId = `base-${artwork.id}`;
+      artwork.baseId = baseId;
+      if (artwork.source && !loaded.bases.some((base: any) => base.id === baseId))
+        loaded.bases.push({ id: baseId, name: artwork.source.name || artwork.name, source: artwork.source, createdAt: artwork.createdAt });
+    }
+    const used = new Set<string>();
+    for (const component of artwork.components || []) {
+      if (!component.sequence || used.has(component.sequence)) {
+        let index = used.size + 1;
+        while (used.has(`C${index}`)) index += 1;
+        component.sequence = `C${index}`;
+      }
+      used.add(component.sequence);
+    }
+  }
+  for (const base of loaded.bases) {
+    if (base.source?.path)
+      base.source.dataUrl = fileToDataUrl(resolveInsideWorkspace(root, base.source.path));
+  }
   loaded.globalComponents = loadGlobalComponents();
   for (const artwork of loaded.artworks || []) {
-    const scenePath = resolveInsideWorkspace(
-      root,
-      artwork.scenePath || `artworks/${artwork.id}/scene.excalidraw.json`,
-    );
+    if (artwork.status === "completed") {
+      if (artwork.record?.previewPath)
+        artwork.completedPreviewDataUrl = fileToDataUrl(resolveInsideWorkspace(root, artwork.record.previewPath));
+      if (artwork.record?.componentsTextPath) {
+        try { artwork.completedComponentsText = readFileSync(resolveInsideWorkspace(root, artwork.record.componentsTextPath), "utf8"); } catch { /* keep record metadata */ }
+      }
+      delete artwork.scene;
+      delete artwork.source;
+      continue;
+    }
+    const sceneCandidates = artwork.scenePath
+      ? [artwork.scenePath]
+      : [`drafts/${artwork.id}/scene.excalidraw.json`, `artworks/${artwork.id}/scene.excalidraw.json`];
+    const scene = sceneCandidates
+      .map((path: string) => readJson<any>(resolveInsideWorkspace(root, path)))
+      .find(Boolean);
     artwork.scene =
-      readJson<any>(scenePath) ||
+      scene ||
         artwork.scene ||
         defaultScene();
     for (const file of Object.values<any>(artwork.scene.files || {}))
@@ -297,9 +334,30 @@ function saveWorkspace(next: any) {
   delete persisted.globalComponents;
   delete persisted.recentProjects;
   delete persisted.windowState;
+  persisted.version = 3;
+  persisted.bases = (persisted.bases || []).map((base: any) => {
+    const actual = (next.bases || []).find((item: any) => item.id === base.id) || base;
+    if (actual.source?.dataUrl && actual.source.hash) {
+      const sourcePath = `assets/source/${actual.source.hash}.png`;
+      dataUrlToFile(actual.source.dataUrl, resolveInsideWorkspace(root, sourcePath));
+      base.source = { ...actual.source, dataUrl: undefined, path: sourcePath };
+      delete base.source.dataUrl;
+    }
+    return base;
+  });
   for (const artwork of persisted.artworks || []) {
     const actual = next.artworks.find((item: any) => item.id === artwork.id);
-    const artworkRoot = resolveInsideWorkspace(root, `artworks/${artwork.id}`);
+    if (artwork.status === "completed") {
+      delete artwork.completedPreviewDataUrl;
+      delete artwork.completedComponentsText;
+      delete artwork.scene;
+      delete artwork.source;
+      delete artwork.components;
+      delete artwork.annotations;
+      delete artwork.notes;
+      continue;
+    }
+    const artworkRoot = resolveInsideWorkspace(root, `drafts/${artwork.id}`);
     mkdirSync(artworkRoot, { recursive: true });
     const scene = JSON.parse(JSON.stringify(actual.scene || defaultScene()));
     for (const [fileId, file] of Object.entries<any>(scene.files || {})) {
@@ -315,7 +373,17 @@ function saveWorkspace(next: any) {
     }
     atomicJson(join(artworkRoot, "scene.excalidraw.json"), scene);
     delete artwork.scene;
-    artwork.scenePath = `artworks/${artwork.id}/scene.excalidraw.json`;
+    artwork.scenePath = `drafts/${artwork.id}/scene.excalidraw.json`;
+    atomicJson(join(artworkRoot, "draft.json"), {
+      id: artwork.id,
+      baseId: artwork.baseId,
+      name: artwork.name,
+      status: artwork.status || "draft",
+      createdAt: artwork.createdAt,
+      updatedAt: artwork.updatedAt,
+      components: actual.components || [],
+      scenePath: artwork.scenePath,
+    });
     if (actual.source?.dataUrl && actual.source.hash) {
       const sourcePath = `assets/source/${actual.source.hash}.png`;
       dataUrlToFile(
@@ -515,54 +583,44 @@ function relinkProject(previousPath: string, projectPath: string) {
   });
   return openProject(targetPath);
 }
-function currentArtwork() {
-  return (
-    workspace?.artworks?.find(
-      (item: any) => item.id === workspace.currentArtworkId,
-    ) ||
-    workspace?.artworks?.[0] ||
-    null
-  );
-}
-function json(res: ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
+function completeArtwork(payload: any) {
+  const target = workspace?.artworks?.find((item: any) => item.id === payload?.artworkId);
+  if (!target) return { ok: false, error: "当前稿件不存在" };
+  if (target.status === "completed") return { ok: false, error: "该稿件已经完成" };
+  if (typeof payload.previewDataUrl !== "string" || typeof payload.componentsText !== "string")
+    return { ok: false, error: "完成记录缺少导出图片或组件信息" };
+  if (!currentProjectPath) return { ok: false, error: "请先选择代码项目" };
+  const root = ensureProjectDirs(currentProjectPath);
+  const recordId = uid("record");
+  const recordRoot = resolveInsideWorkspace(root, `records/${recordId}`);
+  mkdirSync(recordRoot, { recursive: true });
+  dataUrlToFile(payload.previewDataUrl, join(recordRoot, "preview.png"));
+  writeFileSync(join(recordRoot, "components.txt"), payload.componentsText, "utf8");
+  const completedAt = now();
+  atomicJson(join(recordRoot, "record.json"), {
+    id: recordId,
+    artworkId: target.id,
+    baseId: target.baseId,
+    completedAt,
+    previewPath: `records/${recordId}/preview.png`,
+    componentsTextPath: `records/${recordId}/components.txt`,
   });
-  res.end(JSON.stringify(body));
-}
-function startMcpServer() {
-  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    const target = currentArtwork();
-    if (req.method === "GET" && req.url === "/mcp/design-state")
-      return json(res, 200, { workspaceId: workspace?.id, artwork: target });
-    if (req.method === "GET" && req.url === "/mcp/annotated-preview")
-      return json(res, 200, {
-        previewDataUrl: target?.annotatedPreviewDataUrl || null,
-      });
-    if (req.method === "GET" && req.url === "/mcp/confirmed-components")
-      return json(res, 200, target?.components || []);
-    if (req.method === "GET" && req.url === "/mcp/component-matches")
-      return json(res, 200, []);
-    if (req.method === "POST" && req.url === "/mcp/design-notes") {
-      let data = "";
-      req.on("data", (chunk) => {
-        data += chunk;
-      });
-      req.on("end", () => {
-        const body = JSON.parse(data || "{}");
-        if (target) target.notes = body.notes || "";
-        if (workspace) saveWorkspace({ ...workspace, updatedAt: now() });
-        json(res, 200, { ok: true, notes: target?.notes || "" });
-      });
-      return;
-    }
-    json(res, 404, { error: "MCP tool not found" });
-  });
-  server.listen(0, "127.0.0.1", () => {
-    const address = server.address();
-    if (address && typeof address === "object") mcpHttpPort = address.port;
-  });
+  workspace = {
+    ...workspace,
+    currentArtworkId: null,
+    updatedAt: completedAt,
+    artworks: workspace.artworks.map((item: any) => item.id === target.id
+      ? { ...item, status: "completed", completedAt, completedPreviewDataUrl: payload.previewDataUrl, completedComponentsText: payload.componentsText, record: {
+        previewPath: `records/${recordId}/preview.png`,
+        componentsTextPath: `records/${recordId}/components.txt`,
+        completedAt,
+      } }
+      : item),
+  };
+  const saved = saveWorkspace(workspace);
+  if (!saved.ok) return saved;
+  broadcast();
+  return { ok: true, recordId };
 }
 function rendererUrl(view: "bar" | View) {
   const dev =
@@ -1352,65 +1410,8 @@ async function runCodex(payload: {
     };
   }
 }
-async function generateContext(payload: {
-  artworkId: string;
-  prompt: string;
-}) {
-  if (!currentProjectPath) throw new Error("请先选择代码项目");
-  const artwork = workspace?.artworks?.find(
-    (item: any) => item.id === payload.artworkId,
-  );
-  if (!artwork) throw new Error("当前图稿不存在");
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const root = ensureProjectDirs(currentProjectPath);
-  const base = resolveInsideWorkspace(root, `context/${artwork.id}`);
-  const dir = join(base, stamp);
-  mkdirSync(dir, { recursive: true });
-  const latest = join(base, "latest");
-  mkdirSync(latest, { recursive: true });
-  const copyData = (dataUrl: string | undefined, name: string, target = dir) =>
-    dataUrlToFile(dataUrl, join(target, name));
-  const makeContextScene = (target: string) => {
-    const scene = JSON.parse(JSON.stringify(artwork.scene || defaultScene()));
-    for (const [fileId, file] of Object.entries<any>(scene.files || {})) {
-      if (!file.dataURL) continue;
-      const extension = file.mimeType?.includes("svg") ? "svg" : "png";
-      const relative = `assets/${fileId}.${extension}`;
-      dataUrlToFile(file.dataURL, join(target, relative));
-      delete file.dataURL;
-      file.path = relative;
-    }
-    return scene;
-  };
-  const contextArtwork = {
-    ...artwork,
-    scene: undefined,
-    source: artwork.source ? { ...artwork.source, dataUrl: undefined } : null,
-    annotatedPreviewDataUrl: undefined,
-  };
-  copyData(artwork.source?.dataUrl, "original.png");
-  copyData(artwork.annotatedPreviewDataUrl, "annotated-preview.png");
-  atomicJson(join(dir, "scene.excalidraw.json"), makeContextScene(dir));
-  atomicJson(join(dir, "design.json"), {
-    workspaceId: workspace.id,
-    artwork: contextArtwork,
-  });
-  writeFileSync(join(dir, "DEVELOPMENT_PROMPT.md"), payload.prompt, "utf8");
-  const latestScene = join(latest, "scene.excalidraw.json");
-  atomicJson(latestScene, makeContextScene(latest));
-  copyData(artwork.source?.dataUrl, "original.png", latest);
-  copyData(artwork.annotatedPreviewDataUrl, "annotated-preview.png", latest);
-  atomicJson(join(latest, "design.json"), {
-    workspaceId: workspace.id,
-    artwork: contextArtwork,
-  });
-  writeFileSync(join(latest, "DEVELOPMENT_PROMPT.md"), payload.prompt, "utf8");
-  return { ok: true, path: dir, prompt: payload.prompt };
-}
-
 app.whenReady().then(() => {
   workspace = loadWorkspace();
-  startMcpServer();
   ipcMain.handle("workspace:save", (_event, next: any) => {
     try {
       const result = saveWorkspace({ ...next, updatedAt: now() });
@@ -1453,9 +1454,7 @@ app.whenReady().then(() => {
   ipcMain.handle("component-cache:clear", () =>
     clearExpiredCandidateCache(true),
   );
-  ipcMain.handle("context:generate", (_event, payload) =>
-    generateContext(payload),
-  );
+  ipcMain.handle("artwork:complete", (_event, payload) => completeArtwork(payload));
   ipcMain.handle("project:pick", async () => {
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],
@@ -1474,10 +1473,6 @@ app.whenReady().then(() => {
   ipcMain.handle("project:create-workspace", (_event, path: string) =>
     createProjectWorkspace(path),
   );
-  ipcMain.handle("context:open", (_event, path: string) =>
-    shell.openPath(path),
-  );
-  ipcMain.handle("mcp:port", () => mcpHttpPort);
   ipcMain.handle("panel:open", (_event, view: View) => openPanel(view));
   ipcMain.handle("panel:close", (_event, view: View) => {
     const panel = panelWindows.get(view);

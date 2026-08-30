@@ -1,0 +1,6 @@
+// Carbon's default font path uses the legacy `~` resolver syntax from Webpack.
+// Vite resolves package paths directly, so override it for a clean production build.
+@use "@carbon/react" with (
+  $font-path: "@ibm/plex",
+  $css--font-face: false
+);

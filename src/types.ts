@@ -109,6 +109,7 @@ export type CacheStatus = {
 export type ComponentInstance = Candidate & {
   instanceId: string;
   elementId: string;
+  sequence?: string;
   status: "confirmed";
   sourceType?: "image" | "storybook";
   boundsSource?: "image" | "electron-web-frame-main" | "fallback";
@@ -136,6 +137,13 @@ export type SourceAsset = {
   hash: string;
 };
 
+export type BaseArtwork = {
+  id: string;
+  name: string;
+  source: SourceAsset;
+  createdAt: string;
+};
+
 export type SceneData = {
   type: "excalidraw";
   version: 2;
@@ -147,7 +155,10 @@ export type SceneData = {
 
 export type Artwork = {
   id: string;
+  baseId?: string;
   name: string;
+  status?: "draft" | "completed";
+  createdAt?: string;
   updatedAt: string;
   source: SourceAsset | null;
   scene: SceneData;
@@ -156,6 +167,14 @@ export type Artwork = {
   notes: string;
   annotatedPreviewDataUrl?: string;
   lastProjectPath?: string;
+  completedAt?: string;
+  record?: {
+    previewPath: string;
+    componentsTextPath: string;
+    completedAt: string;
+  };
+  completedPreviewDataUrl?: string;
+  completedComponentsText?: string;
 };
 
 export type ProjectRef = {
@@ -175,11 +194,12 @@ export type ProjectStatus = {
 };
 
 export type Workspace = {
-  version: 2;
+  version: 3;
   id: string;
   name: string;
   updatedAt: string;
   currentArtworkId: string | null;
+  bases: BaseArtwork[];
   artworks: Artwork[];
   libraryItems: LibraryItems;
   globalComponents: GlobalComponent[];
