@@ -112,10 +112,14 @@ export type ComponentInstance = Candidate & {
   sequence?: string;
   status: "confirmed";
   sourceType?: "image" | "storybook";
-  boundsSource?: "image" | "electron-web-frame-main" | "fallback";
+  boundsSource?: "image" | "story-dom" | "electron-web-frame-main" | "fallback";
   loadStatus?: "loading" | "ready" | "unavailable";
   intrinsicWidth?: number;
   intrinsicHeight?: number;
+  frameViewportWidth?: number;
+  frameViewportHeight?: number;
+  contentOffsetX?: number;
+  contentOffsetY?: number;
   rotation?: number;
   x?: number;
   y?: number;

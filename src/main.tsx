@@ -49,6 +49,7 @@ import type {
   StorybookStory,
   StorybookSearchResult,
 } from "./types";
+import { PrototypeOverlay } from "./overlay/PrototypeOverlay";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
   excalidrawLibraryReturnUrl,
@@ -331,18 +332,25 @@ function createArtwork(
 }
 function useWorkspace() {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
+  const workspaceRef = useRef(workspace);
+  const readyRef = useRef(false);
   const [history, setHistory] = useState<Workspace[]>([]);
   const [future, setFuture] = useState<Workspace[]>([]);
   useEffect(() => {
-    window.dockyard?.loadWorkspace().then((saved) => {
-      if (saved) setWorkspace(saved);
+    const request = window.dockyard?.loadWorkspace();
+    if (!request) { readyRef.current = true; return; }
+    void request.then((saved) => {
+      if (saved) { workspaceRef.current = saved; setWorkspace(saved); }
+      readyRef.current = true;
     });
-    return window.dockyard?.onDesignState((next) => setWorkspace(next));
+    return window.dockyard?.onDesignState((next) => { workspaceRef.current = next; setWorkspace(next); });
   }, []);
   const update = useCallback(
     (producer: (current: Workspace) => Workspace, record = true) =>
       setWorkspace((current) => {
-        const next = producer(current);
+        if (!readyRef.current) return current;
+        const next = producer(workspaceRef.current);
+        workspaceRef.current = next;
         if (record) {
           setHistory((stack) => [...stack.slice(-39), current]);
           setFuture([]);
@@ -365,6 +373,7 @@ function useWorkspace() {
       if (!previous) return stack;
       setWorkspace((current) => {
         setFuture((items) => [...items, current]);
+        workspaceRef.current = previous;
         window.dockyard?.syncDesign(previous);
         return previous;
       });
@@ -376,6 +385,7 @@ function useWorkspace() {
       if (!next) return stack;
       setWorkspace((current) => {
         setHistory((items) => [...items, current]);
+        workspaceRef.current = next;
         window.dockyard?.syncDesign(next);
         return next;
       });
@@ -385,7 +395,9 @@ function useWorkspace() {
     workspace,
     update,
     save: () =>
-      window.dockyard?.saveWorkspace({ ...workspace, updatedAt: now() }),
+      readyRef.current
+        ? window.dockyard?.saveWorkspace({ ...workspaceRef.current, updatedAt: now() })
+        : Promise.resolve({ ok: false, error: "工作区尚未加载完成" }),
     undo,
     redo,
     canUndo: Boolean(history.length),
@@ -718,7 +730,7 @@ function StorybookSidebar({
   );
 }
 
-function RemoteStoryOverlayLayer({
+function LegacyRemoteStoryOverlayLayer({
   components,
   appState,
   onChange,
@@ -1154,7 +1166,7 @@ function SceneCanvas({
         />
       </LazyExcalidraw>
       </Suspense>
-      <RemoteStoryOverlayLayer components={artwork?.components || []} appState={canvasAppState} onChange={(instanceId, patch) => updateArtwork((current) => ({ ...current, components: current.components.map((item) => item.instanceId === instanceId ? { ...item, ...patch } : item), updatedAt: now() }))} />
+      <PrototypeOverlay components={artwork?.components || []} viewport={{ zoom: Number((canvasAppState?.zoom as any)?.value || canvasAppState?.zoom || 1), scrollX: Number(canvasAppState?.scrollX || 0), scrollY: Number(canvasAppState?.scrollY || 0) }} interactionEnabled={true} onCommit={(instanceId, patch) => updateArtwork((current) => ({ ...current, components: current.components.map((item) => item.instanceId === instanceId ? { ...item, ...patch } : item), updatedAt: now() }))} />
       {!artwork && (
         <div className="canvas-empty-callout" aria-hidden="true">
           <ImagePlus size={26} />
