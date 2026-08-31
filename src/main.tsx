@@ -49,6 +49,8 @@ import type {
   StorybookStory,
   StorybookSearchResult,
 } from "./types";
+import { PrototypeOverlay } from "./overlay/PrototypeOverlay";
+import { createViewportChannel, viewportFromAppState, type ViewportChannel } from "./overlay/viewport-channel";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
   excalidrawLibraryReturnUrl,
@@ -165,8 +167,8 @@ const nextComponentSequence = (components: ComponentInstance[]) => {
       .filter((value): value is string => Boolean(value)),
   );
   let index = 1;
-  while (used.has(`C${index}`)) index += 1;
-  return `C${index}`;
+  while (used.has(String(index))) index += 1;
+  return String(index);
 };
 const componentManifest = (components: ComponentInstance[]) =>
   [
@@ -331,18 +333,28 @@ function createArtwork(
 }
 function useWorkspace() {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
+  const workspaceRef = useRef(workspace);
+  const readyRef = useRef(false);
   const [history, setHistory] = useState<Workspace[]>([]);
   const [future, setFuture] = useState<Workspace[]>([]);
   useEffect(() => {
-    window.dockyard?.loadWorkspace().then((saved) => {
-      if (saved) setWorkspace(saved);
+    const request = window.dockyard?.loadWorkspace();
+    if (!request) { readyRef.current = true; return; }
+    void request.then((saved) => {
+      if (saved) {
+        workspaceRef.current = saved;
+        setWorkspace(saved);
+      }
+      readyRef.current = true;
     });
-    return window.dockyard?.onDesignState((next) => setWorkspace(next));
+    return window.dockyard?.onDesignState((next) => { workspaceRef.current = next; setWorkspace(next); });
   }, []);
   const update = useCallback(
     (producer: (current: Workspace) => Workspace, record = true) =>
       setWorkspace((current) => {
-        const next = producer(current);
+        if (!readyRef.current) return current;
+        const next = producer(workspaceRef.current);
+        workspaceRef.current = next;
         if (record) {
           setHistory((stack) => [...stack.slice(-39), current]);
           setFuture([]);
@@ -365,6 +377,7 @@ function useWorkspace() {
       if (!previous) return stack;
       setWorkspace((current) => {
         setFuture((items) => [...items, current]);
+        workspaceRef.current = previous;
         window.dockyard?.syncDesign(previous);
         return previous;
       });
@@ -376,6 +389,7 @@ function useWorkspace() {
       if (!next) return stack;
       setWorkspace((current) => {
         setHistory((items) => [...items, current]);
+        workspaceRef.current = next;
         window.dockyard?.syncDesign(next);
         return next;
       });
@@ -385,7 +399,9 @@ function useWorkspace() {
     workspace,
     update,
     save: () =>
-      window.dockyard?.saveWorkspace({ ...workspace, updatedAt: now() }),
+      readyRef.current
+        ? window.dockyard?.saveWorkspace({ ...workspaceRef.current, updatedAt: now() })
+        : Promise.resolve({ ok: false, error: "工作区尚未加载完成" }),
     undo,
     redo,
     canUndo: Boolean(history.length),
@@ -718,37 +734,6 @@ function StorybookSidebar({
   );
 }
 
-function RemoteStoryOverlayLayer({
-  components,
-  appState,
-  onChange,
-}: {
-  components: ComponentInstance[];
-  appState?: any;
-  onChange: (instanceId: string, patch: Partial<ComponentInstance>) => void;
-}) {
-  const [altPressed, setAltPressed] = useState(false);
-  const drag = useRef<{ id: string; x: number; y: number; width: number; height: number; rotation: number; startX: number; startY: number; mode: "move" | "resize" | "rotate"; corner?: string } | null>(null);
-  useEffect(() => {
-    const down = (event: KeyboardEvent) => event.key === "Alt" && setAltPressed(true);
-    const up = (event: KeyboardEvent) => event.key === "Alt" && setAltPressed(false);
-    window.addEventListener("keydown", down); window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, []);
-  const scrollX = Number(appState?.scrollX || 0);
-  const scrollY = Number(appState?.scrollY || 0);
-  const zoom = Number((appState?.zoom as any)?.value || appState?.zoom || 1);
-  const stories = components.filter((item) => item.sourceType === "storybook" && item.storyUrl);
-  if (!stories.length) return null;
-  return <div className={`storybook-overlay-layer${altPressed ? " alt-active" : ""}`}>
-    {stories.map((item) => <div key={item.instanceId} className="storybook-overlay-item" style={{ left: `${((item.x || 0) + scrollX) * zoom}px`, top: `${((item.y || 0) + scrollY) * zoom}px`, width: `${(item.width || 320) * zoom}px`, height: `${(item.height || 160) * zoom}px`, transform: `rotate(${item.rotation || 0}rad)` }} onPointerDown={(event) => { if (!altPressed) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "move" }; }} onPointerMove={(event) => { const active = drag.current; if (!active || active.id !== item.instanceId) return; const dx = (event.clientX - active.startX) / zoom; const dy = (event.clientY - active.startY) / zoom; if (active.mode === "move") onChange(item.instanceId, { x: active.x + dx, y: active.y + dy }); else if (active.mode === "resize") { const signX = active.corner?.includes("w") ? -1 : 1; const signY = active.corner?.includes("n") ? -1 : 1; onChange(item.instanceId, { width: Math.max(40, active.width + signX * dx), height: Math.max(32, active.height + signY * dy) }); } else { const centerX = ((active.x + active.width / 2 + scrollX) * zoom); const centerY = ((active.y + active.height / 2 + scrollY) * zoom); const angle = Math.atan2(event.clientY - centerY, event.clientX - centerX) + Math.PI / 2; onChange(item.instanceId, { rotation: event.shiftKey ? Math.round(angle / (Math.PI / 12)) * (Math.PI / 12) : angle }); } }} onPointerUp={() => { drag.current = null; }}>
-      <iframe title={item.storyName || item.storyId || item.name} src={item.storyUrl} onLoad={() => { onChange(item.instanceId, { loadStatus: "loading" }); const request = window.dockyard?.storybookMeasureFrame(item.storyUrl!); if (!request) { onChange(item.instanceId, { loadStatus: "ready" }); return; } void request.then((measurement) => { onChange(item.instanceId, { width: measurement.width, height: measurement.height, intrinsicWidth: measurement.width, intrinsicHeight: measurement.height, boundsSource: "electron-web-frame-main", loadStatus: "ready" }); }).catch(() => { onChange(item.instanceId, { boundsSource: "fallback", loadStatus: "ready" }); }); }} onError={() => onChange(item.instanceId, { loadStatus: "unavailable" })} />
-      {item.sequence && <span className="storybook-overlay-sequence">{item.sequence}</span>}
-      {item.loadStatus === "unavailable" && <div className="storybook-overlay-unavailable">远程 Storybook 暂不可用</div>}
-      {altPressed && <><span className="storybook-overlay-rotate" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "rotate" }; }} /><span className="storybook-overlay-handle nw" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "nw" }; }} /><span className="storybook-overlay-handle ne" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "ne" }; }} /><span className="storybook-overlay-handle sw" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "sw" }; }} /><span className="storybook-overlay-handle se" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "se" }; }} /></>}
-    </div>)}
-  </div>;
-}
 function importArtwork(
   file: File | undefined,
   workspace: Workspace,
@@ -961,6 +946,7 @@ function CanvasDialog({
 
 function SceneCanvas({
   artwork,
+  viewportChannel,
   libraryItems,
   storybookSelection,
   onStorySelection,
@@ -978,6 +964,7 @@ function SceneCanvas({
   onComplete,
 }: {
   artwork: Artwork | null;
+  viewportChannel: ViewportChannel;
   libraryItems: LibraryItems;
   storybookSelection?: Workspace["storybookSelection"];
   onStorySelection: (story: StorybookStory) => void;
@@ -1005,16 +992,45 @@ function SceneCanvas({
       artwork ? ensureSourceScene(artwork.scene, artwork.source) : emptyScene(),
     [artwork?.id],
   );
-  const last = useRef(JSON.stringify(scene));
+  const initialCanvasData = useMemo(() => ({ ...scene, libraryItems }), [scene, libraryItems]);
+  const sceneContentSignature = (value: SceneData) => JSON.stringify({ elements: value.elements, files: value.files || {} });
+  const last = useRef(sceneContentSignature(scene));
   const nativeImageSources = useRef(new Map<string, SourceAsset>());
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
-  const [canvasAppState, setCanvasAppState] = useState<any>(scene.appState);
   const libraryReturnUrl = useMemo(() => excalidrawLibraryReturnUrl(), []);
   useEffect(() => {
-    last.current = JSON.stringify(scene);
-    setCanvasAppState(scene.appState);
-  }, [scene]);
+    last.current = sceneContentSignature(scene);
+    const bounds = canvasWrapRef.current?.getBoundingClientRect();
+    viewportChannel.publish(viewportFromAppState(scene.appState || {}, { width: bounds?.width || 0, height: bounds?.height || 0 }));
+  }, [scene, viewportChannel]);
+  useEffect(() => {
+    const node = canvasWrapRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const publishSize = () => {
+      const current = viewportChannel.getSnapshot();
+      const bounds = node.getBoundingClientRect();
+      viewportChannel.publish({ ...current, width: bounds.width, height: bounds.height });
+    };
+    publishSize();
+    const observer = new ResizeObserver(publishSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [viewportChannel]);
+  const handleCanvasScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const node = event.currentTarget;
+    if (node.scrollLeft === 0 && node.scrollTop === 0) return;
+    const scrollLeft = node.scrollLeft;
+    const scrollTop = node.scrollTop;
+    node.scrollLeft = 0;
+    node.scrollTop = 0;
+    window.dockyard?.writeLog("warn", "canvas.scroll_guard", {
+      scrollLeft,
+      scrollTop,
+      reason: "unexpected-container-scroll",
+    });
+  };
   const generateIdForFile = async (file: File) => {
     const source = await readImage(file);
     nativeImageSources.current.set(source.hash, source);
@@ -1022,10 +1038,12 @@ function SceneCanvas({
   };
   return (
     <div
+      ref={canvasWrapRef}
       className="excalidraw-wrap"
       data-library-return-url={libraryReturnUrl}
       data-library-target={EXCALIDRAW_ANNOTATOR_WINDOW_NAME}
       data-library-token={excalidrawAPI?.id || ""}
+      onScroll={handleCanvasScroll}
       onDragOverCapture={(event) => {
         if (event.dataTransfer.types.includes("application/x-dockyard-story") || event.dataTransfer.types.includes("application/x-dockyard-candidate")) {
           event.preventDefault();
@@ -1074,14 +1092,15 @@ function SceneCanvas({
       <Suspense fallback={<div className="excalidraw-loading" role="status">正在加载画布…</div>}>
       <LazyExcalidraw
         key={artwork?.id || "dockyard-empty-canvas"}
-        initialData={{ ...scene, libraryItems } as any}
+        initialData={initialCanvasData as any}
         excalidrawAPI={setExcalidrawAPI}
         renderTopRightUI={() => <Suspense fallback={null}><LazySidebarTrigger /></Suspense>}
         libraryReturnUrl={libraryReturnUrl}
         onLibraryChange={onLibraryChange}
         generateIdForFile={generateIdForFile}
         onChange={(elements, appState, files) => {
-          setCanvasAppState(appState);
+          const bounds = canvasWrapRef.current?.getBoundingClientRect();
+          viewportChannel.publish(viewportFromAppState(appState, { width: bounds?.width || 0, height: bounds?.height || 0 }));
           const next: SceneData = {
             ...scene,
             elements: [...elements],
@@ -1122,7 +1141,8 @@ function SceneCanvas({
             });
             return;
           }
-          const signature = JSON.stringify(next);
+          // 平移和缩放只更新画布本地视口，不写回工作区，避免空格拖动画布时高频重渲染。
+          const signature = sceneContentSignature(next);
           if (signature !== last.current) {
             last.current = signature;
             updateArtwork(
@@ -1154,7 +1174,7 @@ function SceneCanvas({
         />
       </LazyExcalidraw>
       </Suspense>
-      <RemoteStoryOverlayLayer components={artwork?.components || []} appState={canvasAppState} onChange={(instanceId, patch) => updateArtwork((current) => ({ ...current, components: current.components.map((item) => item.instanceId === instanceId ? { ...item, ...patch } : item), updatedAt: now() }))} />
+      <PrototypeOverlay components={artwork?.components || []} viewport={viewportChannel} interactionEnabled={true} onCommit={(instanceId, patch) => updateArtwork((current) => ({ ...current, components: current.components.map((item) => item.instanceId === instanceId ? { ...item, ...patch } : item), updatedAt: now() }))} />
       {!artwork && (
         <div className="canvas-empty-callout" aria-hidden="true">
           <ImagePlus size={26} />
@@ -1171,6 +1191,7 @@ function SceneCanvas({
 
 function AnnotatorView() {
   const { workspace, update } = useWorkspace();
+  const viewportChannel = useMemo(() => createViewportChannel({ zoom: 1, scrollX: 0, scrollY: 0, width: 0, height: 0 }), []);
   const [status, setStatus] = useState("");
   const [artworkPickerOpen, setArtworkPickerOpen] = useState(false);
   const [recordArtworkId, setRecordArtworkId] = useState<string | null>(null);
@@ -1180,6 +1201,7 @@ function AnnotatorView() {
     componentCount: number;
   } | null>(null);
   const artwork = activeArtwork(workspace);
+  useEffect(() => () => viewportChannel.dispose(), [viewportChannel]);
   useEffect(() => {
     if (!status) return;
     const timer = window.setTimeout(() => setStatus(""), 4200);
@@ -1390,8 +1412,8 @@ function AnnotatorView() {
       boundsSource: "fallback",
       x,
       y,
-      width: 320,
-      height: 160,
+      width: 230,
+      height: 120,
       rotation: 0,
     };
     updateArtwork((current) => ({ ...current, components: [...current.components, instance], updatedAt: now() }));
@@ -1400,19 +1422,15 @@ function AnnotatorView() {
   const dropStory = (story: StorybookStory, event: React.DragEvent<HTMLDivElement>) => {
     if (!artwork) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const appState = artwork.scene.appState || {};
-    const zoom = Number((appState.zoom as any)?.value || appState.zoom || 1);
-    const scrollX = Number(appState.scrollX || 0);
-    const scrollY = Number(appState.scrollY || 0);
-    insertStory(story, (event.clientX - rect.left) / zoom - scrollX - 160, (event.clientY - rect.top) / zoom - scrollY - 80);
+    const current = viewportChannel.getSnapshot();
+    insertStory(story, (event.clientX - rect.left) / current.zoom - current.scrollX - 115, (event.clientY - rect.top) / current.zoom - current.scrollY - 60);
   };
   const addStory = (story: StorybookStory) => {
     if (!artwork) return;
-    const appState = artwork.scene.appState || {};
-    const zoom = Number((appState.zoom as any)?.value || appState.zoom || 1);
-    const scrollX = Number(appState.scrollX || 0);
-    const scrollY = Number(appState.scrollY || 0);
-    insertStory(story, 320 / zoom - scrollX - 160, 240 / zoom - scrollY - 80);
+    const current = viewportChannel.getSnapshot();
+    const centerX = current.width / 2 / current.zoom - current.scrollX;
+    const centerY = current.height / 2 / current.zoom - current.scrollY;
+    insertStory(story, centerX - 115, centerY - 60);
   };
   const importInputRef = useRef<HTMLInputElement>(null);
   const requestArtworkImport = () => importInputRef.current?.click();
@@ -1432,6 +1450,7 @@ function AnnotatorView() {
         />
         <SceneCanvas
           artwork={artwork}
+          viewportChannel={viewportChannel}
           libraryItems={workspace.libraryItems || []}
           storybookSelection={workspace.storybookSelection}
           onStorySelection={(story) => update((current) => ({
@@ -1750,6 +1769,12 @@ function ComponentSearchView() {
                 onClick={() => void window.dockyard?.openCodexLogs()}
               >
                 查看调用记录
+              </button>
+              <button
+                className="cache-clear"
+                onClick={() => void window.dockyard?.openAppLogs()}
+              >
+                查看应用日志
               </button>
             </div>
           </section>

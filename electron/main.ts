@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, screen, shell, webFrameMain } from "electron";
 import { get as httpsGet } from "node:https";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -24,6 +24,12 @@ import {
   resolveInsideWorkspace,
   validateWorkspaceDocuments,
 } from "./workspace-files.js";
+import {
+  initLogger,
+  installProcessErrorHandlers,
+  loggerDirectory,
+  writeLog,
+} from "./logger.js";
 import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types";
 
 const execFileAsync = promisify(execFile);
@@ -48,6 +54,9 @@ if (process.platform === "win32" && process.env.DOCKYARD_DISABLE_GPU !== "0") {
   app.commandLine.appendSwitch("disable-gpu");
   app.commandLine.appendSwitch("disable-gpu-compositing");
 }
+const chromiumLogDirectory = loggerDirectory();
+app.commandLine.appendSwitch("enable-logging", "file");
+app.commandLine.appendSwitch("log-file", join(chromiumLogDirectory, "chromium.log"));
 
 let workspace: any = null;
 let currentProjectPath: string | null = null;
@@ -902,36 +911,131 @@ async function checkStorybookSource(sourceId: string): Promise<StorybookSource> 
     return { ...source, status: "unavailable", checkedAt: now(), error: error instanceof Error ? error.message : String(error) };
   }
 }
+type FrameFailure = { url: string; errorCode: number; errorDescription: string; at: number };
+const frameRegistry = new WeakMap<Electron.WebContents, Map<string, Electron.WebFrameMain>>();
+const frameFailures = new WeakMap<Electron.WebContents, FrameFailure[]>();
+
+function frameKey(processId: number, routingId: number) {
+  return `${processId}:${routingId}`;
+}
+
+function rememberFrame(webContents: Electron.WebContents, processId?: number, routingId?: number) {
+  if (typeof processId !== "number" || typeof routingId !== "number") return;
+  const frame = webFrameMain.fromId(processId, routingId);
+  if (!frame) return;
+  const frames = frameRegistry.get(webContents) || new Map<string, Electron.WebFrameMain>();
+  frames.set(frameKey(processId, routingId), frame);
+  frameRegistry.set(webContents, frames);
+}
+
 function findStoryFrame(webContents: Electron.WebContents, requestedUrl: string) {
   const requested = new URL(requestedUrl);
   const source = storybookSources.find((item) => item.allowedOrigin === requested.origin);
   if (!source) throw new Error("远程 Storybook 地址不在允许列表中");
-  return webContents.mainFrame.framesInSubtree.find((frame) => {
+  const matches = (frame: Electron.WebFrameMain) => {
     try {
       const current = new URL(frame.url);
       return current.origin === requested.origin && current.pathname === requested.pathname && current.searchParams.get("id") === requested.searchParams.get("id");
     } catch { return false; }
-  });
+  };
+  const registered = frameRegistry.get(webContents);
+  const fromRegistry = registered && [...registered.values()].find(matches);
+  return fromRegistry || webContents.mainFrame.framesInSubtree.find(matches);
 }
 async function measureStoryFrame(webContents: Electron.WebContents, requestedUrl: string) {
-  const frame = findStoryFrame(webContents, requestedUrl);
-  if (!frame) throw new Error("没有找到远程 Storybook 页面帧");
-  const result: any = await frame.executeJavaScript(`(async () => {
-    if (document.fonts?.ready) await document.fonts.ready.catch(() => {});
-    const root = document.querySelector('#storybook-root') || document.body;
-    const elements = [...root.querySelectorAll('*')].filter((element) => {
-      const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
-      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-    });
-    const area = innerWidth * innerHeight;
-    const candidates = elements.filter((element) => { const rect = element.getBoundingClientRect(); return rect.width * rect.height < area * .9; });
-    const target = candidates.find((element) => ['button','input','select','textarea','a'].includes(element.tagName.toLowerCase())) || candidates[0];
-    if (!target) return null;
-    const rect = target.getBoundingClientRect(); const style = getComputedStyle(target);
-    return { width: rect.width, height: rect.height, x: rect.x, y: rect.y, viewportWidth: innerWidth, viewportHeight: innerHeight, tag: target.tagName.toLowerCase(), className: typeof target.className === 'string' ? target.className : '', boxShadow: style.boxShadow, frameUrl: location.href };
-  })()`);
-  if (!result || result.width <= 0 || result.height <= 0) throw new Error("远程页面没有返回有效组件边界");
-  return result;
+  const requestId = uid("measure");
+  writeLog("debug", "storybook.measure.start", { requestId, requestedUrl });
+  let requested: URL;
+  try { requested = new URL(requestedUrl); }
+  catch (error) {
+    writeLog("warn", "storybook.measure.origin_denied", { requestId, requestedUrl, message: String(error) });
+    return { ok: false, reason: "origin-denied", detail: String(error), requestId } as const;
+  }
+  const source = storybookSources.find((item) => item.allowedOrigin === requested.origin);
+  if (!source) {
+    writeLog("warn", "storybook.measure.origin_denied", { requestId, requestedUrl });
+    return { ok: false, reason: "origin-denied", requestId } as const;
+  }
+  let frame: Electron.WebFrameMain | undefined;
+  try { frame = findStoryFrame(webContents, requestedUrl); }
+  catch (error) {
+    writeLog("warn", "storybook.measure.frame_not_found", { requestId, requestedUrl, message: error instanceof Error ? error.message : String(error) });
+    return { ok: false, reason: "frame-not-found", detail: error instanceof Error ? error.message : String(error), requestId } as const;
+  }
+  if (!frame) {
+    const failure = frameFailures.get(webContents)?.find((item) => item.url === requestedUrl && Date.now() - item.at < 5000);
+    const reason = failure ? "navigation-failed" : "frame-not-found";
+    writeLog("debug", `storybook.measure.${reason.replaceAll("-", "_")}`, { requestId, requestedUrl, detail: failure?.errorDescription });
+    return { ok: false, reason, detail: failure?.errorDescription, requestId } as const;
+  }
+  try {
+    const result = await frame.executeJavaScript(`(async () => {
+      const startedAt = performance.now();
+      let root = null;
+      let observer = null;
+      let timer = null;
+      let lastKey = "";
+      let stableFrames = 0;
+      const visible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+      };
+      const targets = () => {
+        root = document.querySelector("#storybook-root");
+        if (!root) return null;
+        const explicit = root.querySelector("[data-dockyard-component-root]");
+        if (explicit && visible(explicit)) return { elements: [explicit], method: "explicit-root" };
+        const children = [...root.children].filter(visible);
+        if (children.length === 1) return { elements: children, method: "direct-child" };
+        if (children.length > 1) return { elements: children, method: "union" };
+        return null;
+      };
+      const measure = (selection) => {
+        const rects = selection.elements.map((element) => element.getBoundingClientRect());
+        const left = Math.min(...rects.map((rect) => rect.left));
+        const top = Math.min(...rects.map((rect) => rect.top));
+        const right = Math.max(...rects.map((rect) => rect.right));
+        const bottom = Math.max(...rects.map((rect) => rect.bottom));
+        return { width: right - left, height: bottom - top, x: left, y: top, viewportWidth: innerWidth, viewportHeight: innerHeight, selectionMethod: selection.method };
+      };
+      return await new Promise((resolve) => {
+        const finish = (value) => { if (timer) clearTimeout(timer); observer?.disconnect(); resolve(value); };
+        const inspect = () => {
+          const selection = targets();
+          if (!selection) {
+            if (root && performance.now() - startedAt > 1500) finish({ ok: false, reason: "target-not-found" });
+            else if (performance.now() - startedAt > 3000) finish({ ok: false, reason: "timeout" });
+            else requestAnimationFrame(inspect);
+            return;
+          }
+          if (!observer && typeof ResizeObserver !== "undefined") {
+            observer = new ResizeObserver(() => { stableFrames = 0; });
+            observer.observe(root);
+            selection.elements.forEach((element) => observer.observe(element));
+          }
+          const bounds = measure(selection);
+          const key = [bounds.x, bounds.y, bounds.width, bounds.height, bounds.viewportWidth, bounds.viewportHeight].map((value) => Math.round(value * 100) / 100).join(",");
+          stableFrames = key === lastKey ? stableFrames + 1 : 0;
+          lastKey = key;
+          if (bounds.width > 0 && bounds.height > 0 && stableFrames >= 2) finish({ ok: true, bounds });
+          else requestAnimationFrame(inspect);
+        };
+        if (document.fonts?.ready) document.fonts.ready.catch(() => {}).finally(inspect);
+        else inspect();
+        timer = setTimeout(() => finish({ ok: false, reason: "timeout" }), 3000);
+      });
+    })()`) as any;
+    if (result?.ok) {
+      writeLog("info", "storybook.measure.success", { requestId, requestedUrl, selectionMethod: result.bounds.selectionMethod, width: result.bounds.width, height: result.bounds.height });
+    } else {
+      writeLog("debug", `storybook.measure.${String(result?.reason || "script-failed").replaceAll("-", "_")}`, { requestId, requestedUrl, detail: result?.detail });
+    }
+    return { ...result, requestId };
+  } catch (error) {
+    writeLog("warn", "storybook.measure.script_failed", { requestId, requestedUrl, message: error instanceof Error ? error.message : String(error) });
+    return { ok: false, reason: "script-failed", detail: error instanceof Error ? error.message : String(error), requestId } as const;
+  }
 }
 async function shadcnNode() {
   const override = process.env.DOCKYARD_SHADCN_NODE;
@@ -1411,6 +1515,43 @@ async function runCodex(payload: {
   }
 }
 app.whenReady().then(() => {
+  initLogger();
+  installProcessErrorHandlers();
+  app.on("web-contents-created", (_event, contents) => {
+    contents.on("did-frame-finish-load", (_frameEvent, isMainFrame, frameProcessId, frameRoutingId) => {
+      rememberFrame(contents, frameProcessId, frameRoutingId);
+      writeLog("debug", "storybook.frame.finish_load", {
+        webContentsId: contents.id,
+        isMainFrame,
+        frameProcessId,
+        frameRoutingId,
+      });
+    });
+    contents.on("did-fail-load", (_frameEvent, errorCode, errorDescription, validatedURL, isMainFrame, frameProcessId, frameRoutingId) => {
+      const failures = frameFailures.get(contents) || [];
+      failures.push({ url: validatedURL, errorCode, errorDescription, at: Date.now() });
+      frameFailures.set(contents, failures.slice(-20));
+      writeLog("warn", "storybook.frame.navigation_failed", {
+        webContentsId: contents.id,
+        errorCode,
+        errorDescription,
+        validatedURL,
+        isMainFrame,
+        frameProcessId,
+        frameRoutingId,
+      });
+    });
+    contents.on("render-process-gone", (_goneEvent, details) => {
+      writeLog("error", "renderer.process_gone", {
+        webContentsId: contents.id,
+        reason: details.reason,
+        exitCode: details.exitCode,
+      });
+    });
+    contents.on("unresponsive", () => {
+      writeLog("error", "renderer.unresponsive", { webContentsId: contents.id });
+    });
+  });
   workspace = loadWorkspace();
   ipcMain.handle("workspace:save", (_event, next: any) => {
     try {
@@ -1425,6 +1566,10 @@ app.whenReady().then(() => {
     }
   });
   ipcMain.handle("workspace:load", () => workspace);
+  ipcMain.on("diagnostics:log", (_event, payload: { level?: string; event?: string; context?: Record<string, unknown> }) => {
+    if (!payload || !/^(debug|info|warn|error)$/.test(String(payload.level)) || !/^[a-z0-9_.]+$/.test(String(payload.event))) return;
+    writeLog(payload.level as "debug" | "info" | "warn" | "error", String(payload.event), { ...payload.context, process: "renderer" });
+  });
   ipcMain.handle("storybook:sources", () => storybookSources);
   ipcMain.handle("storybook:catalog", (_event, sourceId: string) =>
     loadStorybookCatalog(sourceId),
@@ -1450,6 +1595,7 @@ app.whenReady().then(() => {
     runStorybookSearch(payload, (trace) => event.sender.send("codex:trace", trace)),
   );
   ipcMain.handle("codex:logs-open", () => shell.openPath(candidateCacheRoot()));
+  ipcMain.handle("diagnostics:logs-open", () => shell.openPath(loggerDirectory()));
   ipcMain.handle("component-cache:status", () => clearExpiredCandidateCache());
   ipcMain.handle("component-cache:clear", () =>
     clearExpiredCandidateCache(true),

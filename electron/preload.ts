@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld("dockyard", {
     return () => ipcRenderer.removeListener("codex:trace", handler);
   },
   openCodexLogs: () => ipcRenderer.invoke("codex:logs-open"),
+  openAppLogs: () => ipcRenderer.invoke("diagnostics:logs-open"),
+  writeLog: (level: "debug" | "info" | "warn" | "error", event: string, context?: Record<string, unknown>) =>
+    ipcRenderer.send("diagnostics:log", { level, event, context }),
   componentCacheStatus: () => ipcRenderer.invoke("component-cache:status"),
   clearComponentCache: () => ipcRenderer.invoke("component-cache:clear"),
   completeArtwork: (payload: unknown) =>

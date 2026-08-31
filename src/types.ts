@@ -71,6 +71,29 @@ export type StorybookCatalog = {
   stories: StorybookStory[];
 };
 
+export type MeasuredBounds = {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  selectionMethod?: "protocol" | "explicit-root" | "direct-child" | "union";
+};
+
+export type StorybookMeasureFailureReason =
+  | "origin-denied"
+  | "frame-not-found"
+  | "navigation-failed"
+  | "script-failed"
+  | "target-not-found"
+  | "unstable-layout"
+  | "timeout";
+
+export type StorybookMeasureResult =
+  | { ok: true; bounds: MeasuredBounds; requestId?: string }
+  | { ok: false; reason: StorybookMeasureFailureReason; detail?: string; requestId?: string };
+
 export type StorybookSearchMatch = {
   sourceId: string;
   path: string;
@@ -112,10 +135,14 @@ export type ComponentInstance = Candidate & {
   sequence?: string;
   status: "confirmed";
   sourceType?: "image" | "storybook";
-  boundsSource?: "image" | "electron-web-frame-main" | "fallback";
+  boundsSource?: "image" | "story-dom" | "electron-web-frame-main" | "fallback";
   loadStatus?: "loading" | "ready" | "unavailable";
   intrinsicWidth?: number;
   intrinsicHeight?: number;
+  frameViewportWidth?: number;
+  frameViewportHeight?: number;
+  contentOffsetX?: number;
+  contentOffsetY?: number;
   rotation?: number;
   x?: number;
   y?: number;
