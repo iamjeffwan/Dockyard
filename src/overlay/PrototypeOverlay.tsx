@@ -89,6 +89,28 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
     else { const centerX = (active.x + active.width / 2 + viewport.scrollX) * viewport.zoom; const centerY = (active.y + active.height / 2 + viewport.scrollY) * viewport.zoom; active.rotation = snapRotation(Math.atan2(event.clientY - centerY, event.clientX - centerX) + Math.PI / 2, event.shiftKey || shiftPressed); }
     setLocalComponents((current) => current.map((item) => item.instanceId === active.id ? { ...item, x: active.x, y: active.y, width: active.width, height: active.height, rotation: active.rotation } : item));
   };
+  const applyMeasuredBounds = (item: ComponentInstance, measured: MeasuredBounds, source: "story-dom" | "electron-web-frame-main" | "fallback") => {
+    const currentWidth = item.width || FALLBACK_WIDTH; const currentHeight = item.height || FALLBACK_HEIGHT;
+    const patch = { width: measured.width, height: measured.height, x: (item.x || 0) + (currentWidth - measured.width) / 2, y: (item.y || 0) + (currentHeight - measured.height) / 2, intrinsicWidth: measured.width, intrinsicHeight: measured.height, frameViewportWidth: measured.viewportWidth, frameViewportHeight: measured.viewportHeight, contentOffsetX: measured.x, contentOffsetY: measured.y, boundsSource: source as ComponentInstance["boundsSource"], loadStatus: "ready" as const };
+    setLocalComponents((current) => current.map((candidate) => candidate.instanceId === item.instanceId ? { ...candidate, ...patch } : candidate));
+    onCommit(item.instanceId, patch);
+  };
+  const measureWithElectron = (item: ComponentInstance) => {
+    const request = window.dockyard?.storybookMeasureFrame;
+    if (!request || !item.storyUrl) return;
+    const delays = [0, 250, 750, 1500];
+    void (async () => {
+      for (const delay of delays) {
+        if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+        try {
+          const measured = await request(storyEmbedUrl(item.storyUrl));
+          if (measured.width > 0 && measured.height > 0) { applyMeasuredBounds(item, measured, "electron-web-frame-main"); return; }
+        } catch { /* continue retrying until fallback */ }
+      }
+      const fallback = { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT, x: 0, y: 0, viewportWidth: FALLBACK_WIDTH, viewportHeight: FALLBACK_HEIGHT };
+      applyMeasuredBounds(item, fallback, "fallback");
+    })();
+  };
   const stories = localComponents.filter((item) => item.sourceType === "storybook" && item.storyUrl);
   if (!stories.length) return null;
   return <div className={`prototype-overlay-layer${altPressed && interactionEnabled ? " is-active" : ""}`} onPointerUp={finish} onPointerCancel={finish}>
@@ -97,7 +119,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
       const intrinsicWidth = item.intrinsicWidth || width; const intrinsicHeight = item.intrinsicHeight || height;
       const frameWidth = item.frameViewportWidth || intrinsicWidth; const frameHeight = item.frameViewportHeight || intrinsicHeight;
       return <div key={item.instanceId} className={`prototype-overlay-item${selectedId === item.instanceId ? " is-selected" : ""}`} style={{ left: `${((item.x || 0) + viewport.scrollX) * viewport.zoom}px`, top: `${((item.y || 0) + viewport.scrollY) * viewport.zoom}px`, width: `${width * viewport.zoom}px`, height: `${height * viewport.zoom}px`, transform: `rotate(${item.rotation || 0}rad)` }} onPointerDown={(event) => begin(item, event, "move")} onPointerMove={move}>
-        <div className="prototype-overlay-scaler" style={{ width: intrinsicWidth, height: intrinsicHeight, transform: `scale(${(width * viewport.zoom) / intrinsicWidth}, ${(height * viewport.zoom) / intrinsicHeight})` }}><iframe ref={(frame) => { if (frame) frames.current.set(item.instanceId, frame); else frames.current.delete(item.instanceId); }} title={item.storyName || item.storyId || item.name} src={storyEmbedUrl(item.storyUrl)} scrolling="no" onLoad={(event) => event.currentTarget.contentWindow?.postMessage({ type: "dockyard:measure-component" }, "*")} style={{ width: frameWidth, height: frameHeight, transform: `translate(${-Number(item.contentOffsetX || 0)}px, ${-Number(item.contentOffsetY || 0)}px)` }} /></div>
+        <div className="prototype-overlay-scaler" style={{ width: intrinsicWidth, height: intrinsicHeight, transform: `scale(${(width * viewport.zoom) / intrinsicWidth}, ${(height * viewport.zoom) / intrinsicHeight})` }}><iframe ref={(frame) => { if (frame) frames.current.set(item.instanceId, frame); else frames.current.delete(item.instanceId); }} title={item.storyName || item.storyId || item.name} src={storyEmbedUrl(item.storyUrl)} scrolling="no" onLoad={(event) => { event.currentTarget.contentWindow?.postMessage({ type: "dockyard:measure-component" }, "*"); measureWithElectron(item); }} onError={() => applyMeasuredBounds(item, { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT, x: 0, y: 0, viewportWidth: FALLBACK_WIDTH, viewportHeight: FALLBACK_HEIGHT }, "fallback")} style={{ width: frameWidth, height: frameHeight, transform: `translate(${-Number(item.contentOffsetX || 0)}px, ${-Number(item.contentOffsetY || 0)}px)` }} /></div>
         {item.sequence && <span className="prototype-overlay-sequence">{item.sequence}</span>}
         {item.boundsSource === "fallback" && <span className="prototype-overlay-fallback-size">{Math.round(width)} × {Math.round(height)}</span>}
         {altPressed && interactionEnabled && selectedId === item.instanceId && <><span className="prototype-overlay-rotate" onPointerDown={(event) => begin(item, event, "rotate")} />{(["nw", "ne", "sw", "se"] as const).map((corner) => <span key={corner} className={`prototype-overlay-handle ${corner}`} onPointerDown={(event) => begin(item, event, "resize", corner)} />)}</>}
