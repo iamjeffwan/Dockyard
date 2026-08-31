@@ -170,28 +170,6 @@ const nextComponentSequence = (components: ComponentInstance[]) => {
   while (used.has(String(index))) index += 1;
   return String(index);
 };
-const normalizeComponentSequences = (workspace: Workspace) => {
-  let changed = false;
-  const artworks = workspace.artworks.map((artwork) => {
-    const components = artwork.components.map((component) => {
-      const sequence = component.sequence?.replace(/^C/, "");
-      if (sequence !== component.sequence) changed = true;
-      return sequence === component.sequence ? component : { ...component, sequence };
-    });
-    const elements = artwork.scene.elements.map((element) => {
-      const value = element.customData?.componentSequence;
-      if (typeof value !== "string") return element;
-      const sequence = value.replace(/^C/, "");
-      if (sequence === value) return element;
-      changed = true;
-      return { ...element, customData: { ...element.customData, componentSequence: sequence } };
-    });
-    return components === artwork.components && elements === artwork.scene.elements
-      ? artwork
-      : { ...artwork, components, scene: { ...artwork.scene, elements } };
-  });
-  return changed ? { ...workspace, artworks } : workspace;
-};
 const componentManifest = (components: ComponentInstance[]) =>
   [
     "当前稿件中的已确认组件：",
@@ -364,10 +342,8 @@ function useWorkspace() {
     if (!request) { readyRef.current = true; return; }
     void request.then((saved) => {
       if (saved) {
-        const normalized = normalizeComponentSequences(saved);
-        workspaceRef.current = normalized;
-        setWorkspace(normalized);
-        if (normalized !== saved) void window.dockyard?.saveWorkspace({ ...normalized, updatedAt: now() });
+        workspaceRef.current = saved;
+        setWorkspace(saved);
       }
       readyRef.current = true;
     });
