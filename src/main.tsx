@@ -730,37 +730,6 @@ function StorybookSidebar({
   );
 }
 
-function LegacyRemoteStoryOverlayLayer({
-  components,
-  appState,
-  onChange,
-}: {
-  components: ComponentInstance[];
-  appState?: any;
-  onChange: (instanceId: string, patch: Partial<ComponentInstance>) => void;
-}) {
-  const [altPressed, setAltPressed] = useState(false);
-  const drag = useRef<{ id: string; x: number; y: number; width: number; height: number; rotation: number; startX: number; startY: number; mode: "move" | "resize" | "rotate"; corner?: string } | null>(null);
-  useEffect(() => {
-    const down = (event: KeyboardEvent) => event.key === "Alt" && setAltPressed(true);
-    const up = (event: KeyboardEvent) => event.key === "Alt" && setAltPressed(false);
-    window.addEventListener("keydown", down); window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, []);
-  const scrollX = Number(appState?.scrollX || 0);
-  const scrollY = Number(appState?.scrollY || 0);
-  const zoom = Number((appState?.zoom as any)?.value || appState?.zoom || 1);
-  const stories = components.filter((item) => item.sourceType === "storybook" && item.storyUrl);
-  if (!stories.length) return null;
-  return <div className={`storybook-overlay-layer${altPressed ? " alt-active" : ""}`}>
-    {stories.map((item) => <div key={item.instanceId} className="storybook-overlay-item" style={{ left: `${((item.x || 0) + scrollX) * zoom}px`, top: `${((item.y || 0) + scrollY) * zoom}px`, width: `${(item.width || 320) * zoom}px`, height: `${(item.height || 160) * zoom}px`, transform: `rotate(${item.rotation || 0}rad)` }} onPointerDown={(event) => { if (!altPressed) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "move" }; }} onPointerMove={(event) => { const active = drag.current; if (!active || active.id !== item.instanceId) return; const dx = (event.clientX - active.startX) / zoom; const dy = (event.clientY - active.startY) / zoom; if (active.mode === "move") onChange(item.instanceId, { x: active.x + dx, y: active.y + dy }); else if (active.mode === "resize") { const signX = active.corner?.includes("w") ? -1 : 1; const signY = active.corner?.includes("n") ? -1 : 1; onChange(item.instanceId, { width: Math.max(40, active.width + signX * dx), height: Math.max(32, active.height + signY * dy) }); } else { const centerX = ((active.x + active.width / 2 + scrollX) * zoom); const centerY = ((active.y + active.height / 2 + scrollY) * zoom); const angle = Math.atan2(event.clientY - centerY, event.clientX - centerX) + Math.PI / 2; onChange(item.instanceId, { rotation: event.shiftKey ? Math.round(angle / (Math.PI / 12)) * (Math.PI / 12) : angle }); } }} onPointerUp={() => { drag.current = null; }}>
-      <iframe title={item.storyName || item.storyId || item.name} src={item.storyUrl} onLoad={() => { onChange(item.instanceId, { loadStatus: "loading" }); const request = window.dockyard?.storybookMeasureFrame(item.storyUrl!); if (!request) { onChange(item.instanceId, { loadStatus: "ready" }); return; } void request.then((measurement) => { onChange(item.instanceId, { width: measurement.width, height: measurement.height, intrinsicWidth: measurement.width, intrinsicHeight: measurement.height, boundsSource: "electron-web-frame-main", loadStatus: "ready" }); }).catch(() => { onChange(item.instanceId, { boundsSource: "fallback", loadStatus: "ready" }); }); }} onError={() => onChange(item.instanceId, { loadStatus: "unavailable" })} />
-      {item.sequence && <span className="storybook-overlay-sequence">{item.sequence}</span>}
-      {item.loadStatus === "unavailable" && <div className="storybook-overlay-unavailable">远程 Storybook 暂不可用</div>}
-      {altPressed && <><span className="storybook-overlay-rotate" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "rotate" }; }} /><span className="storybook-overlay-handle nw" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "nw" }; }} /><span className="storybook-overlay-handle ne" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "ne" }; }} /><span className="storybook-overlay-handle sw" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "sw" }; }} /><span className="storybook-overlay-handle se" onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); drag.current = { id: item.instanceId, x: item.x || 0, y: item.y || 0, width: item.width || 320, height: item.height || 160, rotation: item.rotation || 0, startX: event.clientX, startY: event.clientY, mode: "resize", corner: "se" }; }} /></>}
-    </div>)}
-  </div>;
-}
 function importArtwork(
   file: File | undefined,
   workspace: Workspace,
