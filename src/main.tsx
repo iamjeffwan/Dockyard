@@ -1017,14 +1017,15 @@ function SceneCanvas({
       artwork ? ensureSourceScene(artwork.scene, artwork.source) : emptyScene(),
     [artwork?.id],
   );
-  const last = useRef(JSON.stringify(scene));
+  const sceneContentSignature = (value: SceneData) => JSON.stringify({ elements: value.elements, files: value.files || {} });
+  const last = useRef(sceneContentSignature(scene));
   const nativeImageSources = useRef(new Map<string, SourceAsset>());
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
   const [canvasAppState, setCanvasAppState] = useState<any>(scene.appState);
   const libraryReturnUrl = useMemo(() => excalidrawLibraryReturnUrl(), []);
   useEffect(() => {
-    last.current = JSON.stringify(scene);
+    last.current = sceneContentSignature(scene);
     setCanvasAppState(scene.appState);
   }, [scene]);
   const generateIdForFile = async (file: File) => {
@@ -1134,7 +1135,8 @@ function SceneCanvas({
             });
             return;
           }
-          const signature = JSON.stringify(next);
+          // 平移和缩放只更新画布本地视口，不写回工作区，避免空格拖动画布时高频重渲染。
+          const signature = sceneContentSignature(next);
           if (signature !== last.current) {
             last.current = signature;
             updateArtwork(
