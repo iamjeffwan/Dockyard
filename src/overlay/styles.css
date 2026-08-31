@@ -1,6 +1,6 @@
-.prototype-overlay-layer { position: absolute; inset: 0; z-index: 15; overflow: visible; pointer-events: none; }
+.prototype-overlay-layer { position: absolute; inset: 0; z-index: 15; overflow: visible; pointer-events: none; transform-origin: 0 0; will-change: transform; }
 .prototype-overlay-layer.is-active { pointer-events: auto; }
-.prototype-overlay-item { position: absolute; overflow: visible; transform-origin: top left; pointer-events: none; }
+.prototype-overlay-item { position: absolute; overflow: visible; transform-origin: top left; pointer-events: none; will-change: transform; }
 .prototype-overlay-layer.is-active .prototype-overlay-item { pointer-events: auto; cursor: grab; }
 .prototype-overlay-item.is-selected { outline: 1px solid #6965db; outline-offset: 2px; }
 .prototype-overlay-scaler { position: relative; overflow: hidden; transform-origin: 0 0; pointer-events: none; }

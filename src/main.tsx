@@ -50,6 +50,7 @@ import type {
   StorybookSearchResult,
 } from "./types";
 import { PrototypeOverlay } from "./overlay/PrototypeOverlay";
+import { createViewportChannel, viewportFromAppState } from "./overlay/viewport-channel";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
   excalidrawLibraryReturnUrl,
@@ -990,14 +991,30 @@ function SceneCanvas({
   const sceneContentSignature = (value: SceneData) => JSON.stringify({ elements: value.elements, files: value.files || {} });
   const last = useRef(sceneContentSignature(scene));
   const nativeImageSources = useRef(new Map<string, SourceAsset>());
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null);
+  const viewportChannel = useMemo(() => createViewportChannel({ zoom: 1, scrollX: 0, scrollY: 0, width: 0, height: 0 }), []);
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
-  const [canvasAppState, setCanvasAppState] = useState<any>(scene.appState);
   const libraryReturnUrl = useMemo(() => excalidrawLibraryReturnUrl(), []);
   useEffect(() => {
     last.current = sceneContentSignature(scene);
-    setCanvasAppState(scene.appState);
-  }, [scene]);
+    const bounds = canvasWrapRef.current?.getBoundingClientRect();
+    viewportChannel.publish(viewportFromAppState(scene.appState || {}, { width: bounds?.width || 0, height: bounds?.height || 0 }));
+  }, [scene, viewportChannel]);
+  useEffect(() => () => viewportChannel.dispose(), [viewportChannel]);
+  useEffect(() => {
+    const node = canvasWrapRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const publishSize = () => {
+      const current = viewportChannel.getSnapshot();
+      const bounds = node.getBoundingClientRect();
+      viewportChannel.publish({ ...current, width: bounds.width, height: bounds.height });
+    };
+    publishSize();
+    const observer = new ResizeObserver(publishSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [viewportChannel]);
   const generateIdForFile = async (file: File) => {
     const source = await readImage(file);
     nativeImageSources.current.set(source.hash, source);
@@ -1005,6 +1022,7 @@ function SceneCanvas({
   };
   return (
     <div
+      ref={canvasWrapRef}
       className="excalidraw-wrap"
       data-library-return-url={libraryReturnUrl}
       data-library-target={EXCALIDRAW_ANNOTATOR_WINDOW_NAME}
@@ -1064,7 +1082,8 @@ function SceneCanvas({
         onLibraryChange={onLibraryChange}
         generateIdForFile={generateIdForFile}
         onChange={(elements, appState, files) => {
-          setCanvasAppState(appState);
+          const bounds = canvasWrapRef.current?.getBoundingClientRect();
+          viewportChannel.publish(viewportFromAppState(appState, { width: bounds?.width || 0, height: bounds?.height || 0 }));
           const next: SceneData = {
             ...scene,
             elements: [...elements],
@@ -1138,7 +1157,7 @@ function SceneCanvas({
         />
       </LazyExcalidraw>
       </Suspense>
-      <PrototypeOverlay components={artwork?.components || []} viewport={{ zoom: Number((canvasAppState?.zoom as any)?.value || canvasAppState?.zoom || 1), scrollX: Number(canvasAppState?.scrollX || 0), scrollY: Number(canvasAppState?.scrollY || 0) }} interactionEnabled={true} onCommit={(instanceId, patch) => updateArtwork((current) => ({ ...current, components: current.components.map((item) => item.instanceId === instanceId ? { ...item, ...patch } : item), updatedAt: now() }))} />
+      <PrototypeOverlay components={artwork?.components || []} viewport={viewportChannel} interactionEnabled={true} onCommit={(instanceId, patch) => updateArtwork((current) => ({ ...current, components: current.components.map((item) => item.instanceId === instanceId ? { ...item, ...patch } : item), updatedAt: now() }))} />
       {!artwork && (
         <div className="canvas-empty-callout" aria-hidden="true">
           <ImagePlus size={26} />
