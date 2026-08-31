@@ -1018,6 +1018,19 @@ function SceneCanvas({
     observer.observe(node);
     return () => observer.disconnect();
   }, [viewportChannel]);
+  const handleCanvasScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const node = event.currentTarget;
+    if (node.scrollLeft === 0 && node.scrollTop === 0) return;
+    const scrollLeft = node.scrollLeft;
+    const scrollTop = node.scrollTop;
+    node.scrollLeft = 0;
+    node.scrollTop = 0;
+    window.dockyard?.writeLog("warn", "canvas.scroll_guard", {
+      scrollLeft,
+      scrollTop,
+      reason: "unexpected-container-scroll",
+    });
+  };
   const generateIdForFile = async (file: File) => {
     const source = await readImage(file);
     nativeImageSources.current.set(source.hash, source);
@@ -1030,6 +1043,7 @@ function SceneCanvas({
       data-library-return-url={libraryReturnUrl}
       data-library-target={EXCALIDRAW_ANNOTATOR_WINDOW_NAME}
       data-library-token={excalidrawAPI?.id || ""}
+      onScroll={handleCanvasScroll}
       onDragOverCapture={(event) => {
         if (event.dataTransfer.types.includes("application/x-dockyard-story") || event.dataTransfer.types.includes("application/x-dockyard-candidate")) {
           event.preventDefault();
