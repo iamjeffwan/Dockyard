@@ -44,6 +44,8 @@ export type StructuredModelArtifact = {
     | "event_stream"
     | "model_output"
     | "stderr"
+    | "stdout_raw"
+    | "stderr_raw"
     | "metadata";
   path: string;
   contentHash: string;
@@ -114,15 +116,19 @@ export async function invokeCodexCliStructured(
   const requestPath = join(runDirectory, "request.json");
   const outputPath = join(runDirectory, "last-message.json");
   const eventsPath = join(runDirectory, "events.jsonl");
+  const stdoutRawPath = join(runDirectory, "stdout.raw");
   const stderrPath = join(runDirectory, "stderr.log");
+  const stderrRawPath = join(runDirectory, "stderr.raw");
   const metadataPath = join(runDirectory, "metadata.json");
   const inputDirectory = join(runDirectory, "input-images");
   const candidates: ArtifactCandidate[] = [
     ["request", requestPath],
     ["output_schema", schemaPath],
     ["event_stream", eventsPath],
+    ["stdout_raw", stdoutRawPath],
     ["model_output", outputPath],
     ["stderr", stderrPath],
+    ["stderr_raw", stderrRawPath],
     ["metadata", metadataPath],
   ];
 
@@ -158,7 +164,10 @@ export async function invokeCodexCliStructured(
       env: invocation.env,
       input: request.prompt,
       eventsPath,
+      stdoutRawPath,
       stderrPath,
+      stderrRawPath,
+      outputEncoding: "utf-8",
       timeoutMs: options.timeoutMs ?? 180_000,
       signal: request.signal,
       onEvent: (event) => {
@@ -310,7 +319,10 @@ async function runCodexProcess(input: {
   env?: NodeJS.ProcessEnv;
   input: string;
   eventsPath: string;
+  stdoutRawPath: string;
   stderrPath: string;
+  stderrRawPath: string;
+  outputEncoding: "utf-8" | "gb18030";
   timeoutMs: number;
   signal?: AbortSignal;
   onEvent: (event: unknown) => void;
@@ -323,7 +335,11 @@ async function runCodexProcess(input: {
       stdio: ["pipe", "pipe", "pipe"],
     });
     const eventFile = createWriteStream(input.eventsPath, { encoding: "utf8" });
+    const stdoutRawFile = createWriteStream(input.stdoutRawPath);
     const stderrFile = createWriteStream(input.stderrPath, { encoding: "utf8" });
+    const stderrRawFile = createWriteStream(input.stderrRawPath);
+    const stdoutDecoder = new TextDecoder(input.outputEncoding);
+    const stderrDecoder = new TextDecoder(input.outputEncoding);
     let buffer = "";
     let stderrTail = "";
     let settled = false;
@@ -334,8 +350,10 @@ async function runCodexProcess(input: {
       clearTimeout(timeout);
       input.signal?.removeEventListener("abort", abort);
       eventFile.end();
+      stdoutRawFile.end();
       stderrFile.end();
-      Promise.all([finished(eventFile), finished(stderrFile)]).then(callback, rejectPromise);
+      stderrRawFile.end();
+      Promise.all([finished(eventFile), finished(stdoutRawFile), finished(stderrFile), finished(stderrRawFile)]).then(callback, rejectPromise);
     };
     const stop = (value: "timeout" | "cancelled") => {
       reason = value;
@@ -347,7 +365,8 @@ async function runCodexProcess(input: {
     const timeout = setTimeout(() => stop("timeout"), input.timeoutMs);
     input.signal?.addEventListener("abort", abort, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8");
+      stdoutRawFile.write(chunk);
+      const text = stdoutDecoder.decode(chunk, { stream: true });
       eventFile.write(text);
       buffer += text;
       const lines = buffer.split(/\r?\n/);
@@ -355,12 +374,23 @@ async function runCodexProcess(input: {
       for (const line of lines) parseEvent(line, input.onEvent);
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8");
-      stderrFile.write(chunk);
+      const text = stderrDecoder.decode(chunk, { stream: true });
+      stderrRawFile.write(chunk);
+      stderrFile.write(text);
       stderrTail = `${stderrTail}${text}`.slice(-2000);
     });
     child.once("error", (error) => finish(() => rejectPromise(error)));
     child.once("close", (code) => {
+      const stdoutTail = stdoutDecoder.decode();
+      const stderrTailFlush = stderrDecoder.decode();
+      if (stdoutTail) {
+        eventFile.write(stdoutTail);
+        buffer += stdoutTail;
+      }
+      if (stderrTailFlush) {
+        stderrFile.write(stderrTailFlush);
+        stderrTail = `${stderrTail}${stderrTailFlush}`.slice(-2000);
+      }
       if (buffer) parseEvent(buffer, input.onEvent);
       if (reason === "timeout")
         return finish(() => rejectPromise(new Error(`Codex CLI 超时（${input.timeoutMs}ms）`)));

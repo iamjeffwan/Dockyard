@@ -71,6 +71,29 @@ export type StorybookCatalog = {
   stories: StorybookStory[];
 };
 
+export type MeasuredBounds = {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  selectionMethod?: "protocol" | "explicit-root" | "direct-child" | "union";
+};
+
+export type StorybookMeasureFailureReason =
+  | "origin-denied"
+  | "frame-not-found"
+  | "navigation-failed"
+  | "script-failed"
+  | "target-not-found"
+  | "unstable-layout"
+  | "timeout";
+
+export type StorybookMeasureResult =
+  | { ok: true; bounds: MeasuredBounds; requestId?: string }
+  | { ok: false; reason: StorybookMeasureFailureReason; detail?: string; requestId?: string };
+
 export type StorybookSearchMatch = {
   sourceId: string;
   path: string;

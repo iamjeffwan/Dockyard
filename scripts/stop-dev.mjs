@@ -30,10 +30,8 @@ if (process.platform === "win32") {
 
 const remaining = [...new Set(listeningPids(5173))];
 if (remaining.length > 0) {
-  console.error(
-    `5173 端口仍被占用（PID: ${remaining.join(", ")}），请先关闭对应进程。`,
-  );
+  console.error("[ERROR] dev.port_still_in_use");
   process.exitCode = 1;
 } else {
-  console.log("Dockyard 开发进程已关闭，5173 端口已释放。");
+  console.log("[INFO] dev.stopped");
 }

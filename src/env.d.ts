@@ -8,6 +8,7 @@ import type {
   StorybookSearchResult,
   StorybookSource,
   ProjectStatus,
+  StorybookMeasureResult,
   Workspace,
 } from "./types";
 
@@ -22,6 +23,8 @@ declare global {
       runStorybookSearch: (payload: unknown) => Promise<StorybookSearchResult>;
       onCodexTrace: (listener: (trace: CodexTraceEvent) => void) => () => void;
       openCodexLogs: () => Promise<string>;
+      openAppLogs: () => Promise<string>;
+      writeLog: (level: "debug" | "info" | "warn" | "error", event: string, context?: Record<string, unknown>) => void;
       componentCacheStatus: () => Promise<CacheStatus>;
       clearComponentCache: () => Promise<CacheStatus>;
       completeArtwork: (payload: unknown) => Promise<{
@@ -57,11 +60,7 @@ declare global {
       storybookSources: () => Promise<StorybookSource[]>;
       storybookCatalog: (sourceId: string) => Promise<StorybookCatalog>;
       storybookCheck: (sourceId: string) => Promise<StorybookSource>;
-      storybookMeasureFrame: (storyUrl: string) => Promise<{
-        width: number; height: number; x: number; y: number;
-        viewportWidth: number; viewportHeight: number;
-        tag?: string; className?: string; boxShadow?: string; frameUrl?: string;
-      }>;
+      storybookMeasureFrame: (storyUrl: string) => Promise<StorybookMeasureResult>;
       captureViewport: () => Promise<string | null>;
     };
   }

@@ -1756,6 +1756,12 @@ function ComponentSearchView() {
               >
                 查看调用记录
               </button>
+              <button
+                className="cache-clear"
+                onClick={() => void window.dockyard?.openAppLogs()}
+              >
+                查看应用日志
+              </button>
             </div>
           </section>
           <section aria-live="polite">
