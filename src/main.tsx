@@ -50,7 +50,7 @@ import type {
   StorybookSearchResult,
 } from "./types";
 import { PrototypeOverlay } from "./overlay/PrototypeOverlay";
-import { createViewportChannel, viewportFromAppState } from "./overlay/viewport-channel";
+import { createViewportChannel, viewportFromAppState, type ViewportChannel } from "./overlay/viewport-channel";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
   excalidrawLibraryReturnUrl,
@@ -167,8 +167,30 @@ const nextComponentSequence = (components: ComponentInstance[]) => {
       .filter((value): value is string => Boolean(value)),
   );
   let index = 1;
-  while (used.has(`C${index}`)) index += 1;
-  return `C${index}`;
+  while (used.has(String(index))) index += 1;
+  return String(index);
+};
+const normalizeComponentSequences = (workspace: Workspace) => {
+  let changed = false;
+  const artworks = workspace.artworks.map((artwork) => {
+    const components = artwork.components.map((component) => {
+      const sequence = component.sequence?.replace(/^C/, "");
+      if (sequence !== component.sequence) changed = true;
+      return sequence === component.sequence ? component : { ...component, sequence };
+    });
+    const elements = artwork.scene.elements.map((element) => {
+      const value = element.customData?.componentSequence;
+      if (typeof value !== "string") return element;
+      const sequence = value.replace(/^C/, "");
+      if (sequence === value) return element;
+      changed = true;
+      return { ...element, customData: { ...element.customData, componentSequence: sequence } };
+    });
+    return components === artwork.components && elements === artwork.scene.elements
+      ? artwork
+      : { ...artwork, components, scene: { ...artwork.scene, elements } };
+  });
+  return changed ? { ...workspace, artworks } : workspace;
 };
 const componentManifest = (components: ComponentInstance[]) =>
   [
@@ -341,7 +363,12 @@ function useWorkspace() {
     const request = window.dockyard?.loadWorkspace();
     if (!request) { readyRef.current = true; return; }
     void request.then((saved) => {
-      if (saved) { workspaceRef.current = saved; setWorkspace(saved); }
+      if (saved) {
+        const normalized = normalizeComponentSequences(saved);
+        workspaceRef.current = normalized;
+        setWorkspace(normalized);
+        if (normalized !== saved) void window.dockyard?.saveWorkspace({ ...normalized, updatedAt: now() });
+      }
       readyRef.current = true;
     });
     return window.dockyard?.onDesignState((next) => { workspaceRef.current = next; setWorkspace(next); });
@@ -943,6 +970,7 @@ function CanvasDialog({
 
 function SceneCanvas({
   artwork,
+  viewportChannel,
   libraryItems,
   storybookSelection,
   onStorySelection,
@@ -960,6 +988,7 @@ function SceneCanvas({
   onComplete,
 }: {
   artwork: Artwork | null;
+  viewportChannel: ViewportChannel;
   libraryItems: LibraryItems;
   storybookSelection?: Workspace["storybookSelection"];
   onStorySelection: (story: StorybookStory) => void;
@@ -992,7 +1021,6 @@ function SceneCanvas({
   const last = useRef(sceneContentSignature(scene));
   const nativeImageSources = useRef(new Map<string, SourceAsset>());
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
-  const viewportChannel = useMemo(() => createViewportChannel({ zoom: 1, scrollX: 0, scrollY: 0, width: 0, height: 0 }), []);
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
   const libraryReturnUrl = useMemo(() => excalidrawLibraryReturnUrl(), []);
@@ -1001,7 +1029,6 @@ function SceneCanvas({
     const bounds = canvasWrapRef.current?.getBoundingClientRect();
     viewportChannel.publish(viewportFromAppState(scene.appState || {}, { width: bounds?.width || 0, height: bounds?.height || 0 }));
   }, [scene, viewportChannel]);
-  useEffect(() => () => viewportChannel.dispose(), [viewportChannel]);
   useEffect(() => {
     const node = canvasWrapRef.current;
     if (!node || typeof ResizeObserver === "undefined") return;
@@ -1174,6 +1201,7 @@ function SceneCanvas({
 
 function AnnotatorView() {
   const { workspace, update } = useWorkspace();
+  const viewportChannel = useMemo(() => createViewportChannel({ zoom: 1, scrollX: 0, scrollY: 0, width: 0, height: 0 }), []);
   const [status, setStatus] = useState("");
   const [artworkPickerOpen, setArtworkPickerOpen] = useState(false);
   const [recordArtworkId, setRecordArtworkId] = useState<string | null>(null);
@@ -1183,6 +1211,7 @@ function AnnotatorView() {
     componentCount: number;
   } | null>(null);
   const artwork = activeArtwork(workspace);
+  useEffect(() => () => viewportChannel.dispose(), [viewportChannel]);
   useEffect(() => {
     if (!status) return;
     const timer = window.setTimeout(() => setStatus(""), 4200);
@@ -1393,8 +1422,8 @@ function AnnotatorView() {
       boundsSource: "fallback",
       x,
       y,
-      width: 320,
-      height: 160,
+      width: 230,
+      height: 120,
       rotation: 0,
     };
     updateArtwork((current) => ({ ...current, components: [...current.components, instance], updatedAt: now() }));
@@ -1403,19 +1432,15 @@ function AnnotatorView() {
   const dropStory = (story: StorybookStory, event: React.DragEvent<HTMLDivElement>) => {
     if (!artwork) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const appState = artwork.scene.appState || {};
-    const zoom = Number((appState.zoom as any)?.value || appState.zoom || 1);
-    const scrollX = Number(appState.scrollX || 0);
-    const scrollY = Number(appState.scrollY || 0);
-    insertStory(story, (event.clientX - rect.left) / zoom - scrollX - 160, (event.clientY - rect.top) / zoom - scrollY - 80);
+    const current = viewportChannel.getSnapshot();
+    insertStory(story, (event.clientX - rect.left) / current.zoom - current.scrollX - 115, (event.clientY - rect.top) / current.zoom - current.scrollY - 60);
   };
   const addStory = (story: StorybookStory) => {
     if (!artwork) return;
-    const appState = artwork.scene.appState || {};
-    const zoom = Number((appState.zoom as any)?.value || appState.zoom || 1);
-    const scrollX = Number(appState.scrollX || 0);
-    const scrollY = Number(appState.scrollY || 0);
-    insertStory(story, 320 / zoom - scrollX - 160, 240 / zoom - scrollY - 80);
+    const current = viewportChannel.getSnapshot();
+    const centerX = current.width / 2 / current.zoom - current.scrollX;
+    const centerY = current.height / 2 / current.zoom - current.scrollY;
+    insertStory(story, centerX - 115, centerY - 60);
   };
   const importInputRef = useRef<HTMLInputElement>(null);
   const requestArtworkImport = () => importInputRef.current?.click();
@@ -1435,6 +1460,7 @@ function AnnotatorView() {
         />
         <SceneCanvas
           artwork={artwork}
+          viewportChannel={viewportChannel}
           libraryItems={workspace.libraryItems || []}
           storybookSelection={workspace.storybookSelection}
           onStorySelection={(story) => update((current) => ({

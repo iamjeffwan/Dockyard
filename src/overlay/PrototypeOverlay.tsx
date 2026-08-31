@@ -69,6 +69,15 @@ function cancelFrame(id: number) {
   }
 }
 
+function rotatePoint(x: number, y: number, centerX: number, centerY: number, angle: number) {
+  const dx = x - centerX;
+  const dy = y - centerY;
+  return {
+    x: centerX + dx * Math.cos(angle) - dy * Math.sin(angle),
+    y: centerY + dx * Math.sin(angle) + dy * Math.cos(angle),
+  };
+}
+
 export function PrototypeOverlay({ components, viewport, interactionEnabled, onCommit }: PrototypeOverlayProps) {
   const [altPressed, setAltPressed] = useState(false);
   const [shiftPressed, setShiftPressed] = useState(false);
@@ -76,19 +85,26 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
   const rootRef = useRef<HTMLDivElement | null>(null);
   const drag = useRef<DragSession | null>(null);
   const componentsRef = useRef(components);
+  const onCommitRef = useRef(onCommit);
   const positionsRef = useRef(new Map(components.map((item) => [item.instanceId, toRuntimePosition(item)])));
   const framesRef = useRef(new Map<string, HTMLIFrameElement>());
-  const itemNodesRef = useRef(new Map<string, HTMLDivElement>());
+  const shellNodesRef = useRef(new Map<string, HTMLDivElement>());
+  const frameNodesRef = useRef(new Map<string, HTMLDivElement>());
   const scalerNodesRef = useRef(new Map<string, HTMLDivElement>());
+  const labelNodesRef = useRef(new Map<string, HTMLSpanElement>());
   const viewportRef = useRef<ViewportSnapshot>(viewport.getSnapshot());
   const scheduledFrameRef = useRef<number | null>(null);
 
   const applyPosition = useCallback((item: ComponentInstance, position: RuntimePosition) => {
-    const node = itemNodesRef.current.get(item.instanceId);
-    if (node) {
-      node.style.width = `${position.width}px`;
-      node.style.height = `${position.height}px`;
-      node.style.transform = `translate3d(${position.x}px, ${position.y}px, 0) rotate(${position.rotation}rad)`;
+    const shell = shellNodesRef.current.get(item.instanceId);
+    if (shell) {
+      shell.style.transform = `translate3d(${position.x}px, ${position.y}px, 0)`;
+    }
+    const frameNode = frameNodesRef.current.get(item.instanceId);
+    if (frameNode) {
+      frameNode.style.width = `${position.width}px`;
+      frameNode.style.height = `${position.height}px`;
+      frameNode.style.transform = `rotate(${position.rotation}rad)`;
     }
     const scaler = scalerNodesRef.current.get(item.instanceId);
     if (scaler) {
@@ -97,6 +113,11 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
       scaler.style.width = `${intrinsicWidth}px`;
       scaler.style.height = `${intrinsicHeight}px`;
       scaler.style.transform = `scale(${position.width / intrinsicWidth}, ${position.height / intrinsicHeight})`;
+    }
+    const label = labelNodesRef.current.get(item.instanceId);
+    if (label) {
+      const anchor = rotatePoint(-30, -17, position.width / 2, position.height / 2, position.rotation);
+      label.style.transform = `translate3d(${anchor.x}px, ${anchor.y}px, 0)`;
     }
   }, []);
 
@@ -131,6 +152,10 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
       scheduledFrameRef.current = null;
     };
   }, [scheduleVisuals, viewport]);
+
+  useEffect(() => {
+    onCommitRef.current = onCommit;
+  }, [onCommit]);
 
   useEffect(() => {
     componentsRef.current = components;
@@ -241,7 +266,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
     };
     positionsRef.current.set(item.instanceId, next);
     applyPosition(item, next);
-    onCommit(item.instanceId, { width: measured.width, height: measured.height, x: next.x, y: next.y, intrinsicWidth: measured.width, intrinsicHeight: measured.height, frameViewportWidth: measured.viewportWidth, frameViewportHeight: measured.viewportHeight, contentOffsetX: measured.x, contentOffsetY: measured.y, boundsSource: source, loadStatus: "ready" });
+    onCommitRef.current(item.instanceId, { width: measured.width, height: measured.height, x: next.x, y: next.y, intrinsicWidth: measured.width, intrinsicHeight: measured.height, frameViewportWidth: measured.viewportWidth, frameViewportHeight: measured.viewportHeight, contentOffsetX: measured.x, contentOffsetY: measured.y, boundsSource: source, loadStatus: "ready" });
   };
 
   const measureWithElectron = (item: ComponentInstance) => {
@@ -270,11 +295,14 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
       const intrinsicHeight = Number(item.intrinsicHeight) || position.height;
       const frameWidth = Number(item.frameViewportWidth) || intrinsicWidth;
       const frameHeight = Number(item.frameViewportHeight) || intrinsicHeight;
-      return <div key={item.instanceId} ref={(node) => { if (node) itemNodesRef.current.set(item.instanceId, node); else itemNodesRef.current.delete(item.instanceId); }} className={`prototype-overlay-item${selectedId === item.instanceId ? " is-selected" : ""}`} style={{ left: 0, top: 0, width: position.width, height: position.height, transform: `translate3d(${position.x}px, ${position.y}px, 0) rotate(${position.rotation}rad)` }} onPointerDown={(event) => begin(item, event, "move")} onPointerMove={move}>
-        <div ref={(node) => { if (node) scalerNodesRef.current.set(item.instanceId, node); else scalerNodesRef.current.delete(item.instanceId); }} className="prototype-overlay-scaler" style={{ width: intrinsicWidth, height: intrinsicHeight, transform: `scale(${position.width / intrinsicWidth}, ${position.height / intrinsicHeight})` }}><iframe ref={(frameElement) => { if (frameElement) framesRef.current.set(item.instanceId, frameElement); else framesRef.current.delete(item.instanceId); }} title={item.storyName || item.storyId || item.name} src={storyEmbedUrl(item.storyUrl)} scrolling="no" onLoad={(event) => { event.currentTarget.contentWindow?.postMessage({ type: "dockyard:measure-component" }, "*"); measureWithElectron(item); }} onError={() => applyMeasuredBounds(item, { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT, x: 0, y: 0, viewportWidth: FALLBACK_WIDTH, viewportHeight: FALLBACK_HEIGHT }, "fallback")} style={{ width: frameWidth, height: frameHeight, transform: `translate(${-Number(item.contentOffsetX || 0)}px, ${-Number(item.contentOffsetY || 0)}px)` }} /></div>
-        {item.sequence && <span className="prototype-overlay-sequence">{item.sequence}</span>}
-        {item.boundsSource === "fallback" && <span className="prototype-overlay-fallback-size">{Math.round(position.width)} × {Math.round(position.height)}</span>}
-        {altPressed && interactionEnabled && selectedId === item.instanceId && <><span className="prototype-overlay-rotate" onPointerDown={(event) => begin(item, event, "rotate")} />{(["nw", "ne", "sw", "se"] as const).map((corner) => <span key={corner} className={`prototype-overlay-handle ${corner}`} onPointerDown={(event) => begin(item, event, "resize", corner)} />)}</>}
+      const labelAnchor = rotatePoint(-30, -17, position.width / 2, position.height / 2, position.rotation);
+      return <div key={item.instanceId} ref={(node) => { if (node) shellNodesRef.current.set(item.instanceId, node); else shellNodesRef.current.delete(item.instanceId); }} className="prototype-overlay-shell" style={{ left: 0, top: 0, width: position.width, height: position.height, transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}>
+        <div ref={(node) => { if (node) frameNodesRef.current.set(item.instanceId, node); else frameNodesRef.current.delete(item.instanceId); }} className={`prototype-overlay-item${selectedId === item.instanceId ? " is-selected" : ""}`} style={{ width: position.width, height: position.height, transform: `rotate(${position.rotation}rad)` }} onPointerDown={(event) => begin(item, event, "move")} onPointerMove={move}>
+          <div ref={(node) => { if (node) scalerNodesRef.current.set(item.instanceId, node); else scalerNodesRef.current.delete(item.instanceId); }} className="prototype-overlay-scaler" style={{ width: intrinsicWidth, height: intrinsicHeight, transform: `scale(${position.width / intrinsicWidth}, ${position.height / intrinsicHeight})` }}><iframe ref={(frameElement) => { if (frameElement) framesRef.current.set(item.instanceId, frameElement); else framesRef.current.delete(item.instanceId); }} title={item.storyName || item.storyId || item.name} src={storyEmbedUrl(item.storyUrl)} scrolling="no" onLoad={(event) => { event.currentTarget.contentWindow?.postMessage({ type: "dockyard:measure-component" }, "*"); measureWithElectron(item); }} onError={() => applyMeasuredBounds(item, { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT, x: 0, y: 0, viewportWidth: FALLBACK_WIDTH, viewportHeight: FALLBACK_HEIGHT }, "fallback")} style={{ width: frameWidth, height: frameHeight, transform: `translate(${-Number(item.contentOffsetX || 0)}px, ${-Number(item.contentOffsetY || 0)}px)` }} /></div>
+          {item.boundsSource === "fallback" && <span className="prototype-overlay-fallback-size">{Math.round(position.width)} × {Math.round(position.height)}</span>}
+          {altPressed && interactionEnabled && selectedId === item.instanceId && <><span className="prototype-overlay-rotate" onPointerDown={(event) => begin(item, event, "rotate")} />{(["nw", "ne", "sw", "se"] as const).map((corner) => <span key={corner} className={`prototype-overlay-handle ${corner}`} onPointerDown={(event) => begin(item, event, "resize", corner)} />)}</>}
+        </div>
+        {item.sequence && <span ref={(node) => { if (node) labelNodesRef.current.set(item.instanceId, node); else labelNodesRef.current.delete(item.instanceId); }} className="prototype-overlay-sequence" style={{ transform: `translate3d(${labelAnchor.x}px, ${labelAnchor.y}px, 0)` }}>{item.sequence}</span>}
       </div>;
     })}
   </div>;
