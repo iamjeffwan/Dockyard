@@ -986,6 +986,7 @@ function SceneCanvas({
       artwork ? ensureSourceScene(artwork.scene, artwork.source) : emptyScene(),
     [artwork?.id],
   );
+  const initialCanvasData = useMemo(() => ({ ...scene, libraryItems }), [scene, libraryItems]);
   const sceneContentSignature = (value: SceneData) => JSON.stringify({ elements: value.elements, files: value.files || {} });
   const last = useRef(sceneContentSignature(scene));
   const nativeImageSources = useRef(new Map<string, SourceAsset>());
@@ -1056,7 +1057,7 @@ function SceneCanvas({
       <Suspense fallback={<div className="excalidraw-loading" role="status">正在加载画布…</div>}>
       <LazyExcalidraw
         key={artwork?.id || "dockyard-empty-canvas"}
-        initialData={{ ...scene, libraryItems } as any}
+        initialData={initialCanvasData as any}
         excalidrawAPI={setExcalidrawAPI}
         renderTopRightUI={() => <Suspense fallback={null}><LazySidebarTrigger /></Suspense>}
         libraryReturnUrl={libraryReturnUrl}
