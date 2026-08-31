@@ -1568,7 +1568,7 @@ app.whenReady().then(() => {
   ipcMain.handle("workspace:load", () => workspace);
   ipcMain.on("diagnostics:log", (_event, payload: { level?: string; event?: string; context?: Record<string, unknown> }) => {
     if (!payload || !/^(debug|info|warn|error)$/.test(String(payload.level)) || !/^[a-z0-9_.]+$/.test(String(payload.event))) return;
-    writeLog(payload.level as "debug" | "info" | "warn" | "error", String(payload.event), payload.context);
+    writeLog(payload.level as "debug" | "info" | "warn" | "error", String(payload.event), { ...payload.context, process: "renderer" });
   });
   ipcMain.handle("storybook:sources", () => storybookSources);
   ipcMain.handle("storybook:catalog", (_event, sourceId: string) =>

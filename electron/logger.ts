@@ -50,6 +50,8 @@ export function writeLog(level: LogLevel, event: string, context?: LogContext) {
     level,
     event,
     ...sanitized,
+    process: typeof sanitized.process === "string" ? sanitized.process : "electron-main",
+    stage: typeof sanitized.stage === "string" ? sanitized.stage : event.split(".").pop(),
   };
   try {
     appendFileSync(path, `${JSON.stringify(entry)}\n`, "utf8");
