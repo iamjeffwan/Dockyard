@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Copy, Minus, PanelsTopLeft } from "lucide-react";
+import { Button } from "@excalidraw/excalidraw";
 import type { ComponentInstance } from "../types";
 
 export function ComponentInventory({
@@ -17,16 +18,16 @@ export function ComponentInventory({
   const panelId = "dockyard-current-components";
   return (
     <div className="component-inventory">
-      <button
+      <Button
         type="button"
         className="component-inventory-trigger"
         aria-label="查看所用组件"
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen((value) => !value)}
+        onSelect={() => setOpen((value) => !value)}
       >
         <PanelsTopLeft size={18} aria-hidden="true" />
-      </button>
+      </Button>
       {open && (
         <aside id={panelId} className="component-inventory-panel" aria-label="所用组件">
           <div className="component-inventory-header">
