@@ -11,6 +11,8 @@
     "test:codex-cli": "tsc -p tsconfig.electron.json && node --test test/codex-cli-model.test.mjs",
     "test:library-host": "tsc -p tsconfig.electron.json && node --test test/excalidraw-library-host.test.mjs test/external-navigation.test.mjs",
     "test:workspace": "tsc -p tsconfig.electron.json && node --test test/workspace-files.test.mjs",
+    "test:delivery": "node --test test/delivery-module.test.mjs",
+    "test:workspace-store": "node --test test/workspace-store.test.mjs",
     "test:dev-processes": "node --test test/dev-processes.test.mjs",
     "verify:artwork-open": "node scripts/verify-artwork-open.mjs",
     "verify:project-picker": "node scripts/verify-project-picker.mjs",

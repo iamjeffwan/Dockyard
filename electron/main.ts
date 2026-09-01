@@ -614,6 +614,12 @@ function completeArtwork(payload: any) {
     previewPath: `records/${recordId}/preview.png`,
     componentsTextPath: `records/${recordId}/components.txt`,
   });
+  const record = {
+    previewPath: `records/${recordId}/preview.png`,
+    componentsTextPath: `records/${recordId}/components.txt`,
+    completedAt,
+  };
+  if (payload.persistOnly) return { ok: true, recordId, record };
   workspace = {
     ...workspace,
     currentArtworkId: null,

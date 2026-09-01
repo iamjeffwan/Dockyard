@@ -52,6 +52,8 @@ import {
   StorybookSidebar,
   createViewportChannel,
 } from "./overlay";
+import { createDeliveryModule } from "./delivery/module";
+import { useWorkspace } from "./workspace/useWorkspace";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
 } from "./excalidraw-library-host";
@@ -75,6 +77,8 @@ function CanvasMainMenu({
   onSave,
   onExportDelivery,
   onCopyComponents,
+  onExportComponents,
+  onCopyImage,
   onComplete,
 }: {
   hasArtwork: boolean;
@@ -82,6 +86,8 @@ function CanvasMainMenu({
   onSave: () => void;
   onExportDelivery: () => void;
   onCopyComponents: () => void;
+  onExportComponents: () => void;
+  onCopyImage: () => void;
   onComplete: () => void;
 }) {
   return (
@@ -91,6 +97,8 @@ function CanvasMainMenu({
       <MainMenu.Separator />
       <MainMenu.Item icon={<Save size={16} />} onSelect={onSave} disabled={!hasArtwork}>保存到 Dockyard</MainMenu.Item>
       <MainMenu.Item icon={<Send size={16} />} onSelect={onExportDelivery} disabled={!hasArtwork}>导出开发素材</MainMenu.Item>
+      <MainMenu.Item icon={<ImagePlus size={16} />} onSelect={onCopyImage} disabled={!hasArtwork}>复制图片</MainMenu.Item>
+      <MainMenu.Item icon={<FileCode2 size={16} />} onSelect={onExportComponents} disabled={!hasArtwork}>导出组件清单</MainMenu.Item>
       <MainMenu.Item icon={<FileCode2 size={16} />} onSelect={onCopyComponents} disabled={!hasArtwork}>复制组件信息</MainMenu.Item>
       <MainMenu.Item icon={<Check size={16} />} onSelect={onComplete} disabled={!hasArtwork}>完成并记录</MainMenu.Item>
       <MainMenu.Separator />
@@ -134,21 +142,6 @@ const componentManifest = (components: ComponentInstance[]) =>
       "",
     ].join("\n")),
   ].join("\n");
-const emptyWorkspace: Workspace = {
-  version: 3,
-  id: uid("workspace"),
-  name: "未命名设计",
-  updatedAt: now(),
-  currentArtworkId: null,
-  artworks: [],
-  bases: [],
-  libraryItems: [],
-  globalComponents: [],
-  recentProjects: [],
-  preferredLibraries: ["shadcn/ui"],
-  windowState: {},
-};
-
 function artworkName(items: Artwork[], name: string) {
   const base = name.replace(/\.[^.]+$/, "") || "图稿";
   const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
@@ -184,83 +177,6 @@ function createArtwork(
     annotations: [],
     components: [],
     notes: "",
-  };
-}
-function useWorkspace() {
-  const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
-  const workspaceRef = useRef(workspace);
-  const readyRef = useRef(false);
-  const [history, setHistory] = useState<Workspace[]>([]);
-  const [future, setFuture] = useState<Workspace[]>([]);
-  useEffect(() => {
-    const request = window.dockyard?.loadWorkspace();
-    if (!request) { readyRef.current = true; return; }
-    void request.then((saved) => {
-      if (saved) {
-        workspaceRef.current = saved;
-        setWorkspace(saved);
-      }
-      readyRef.current = true;
-    });
-    return window.dockyard?.onDesignState((next) => { workspaceRef.current = next; setWorkspace(next); });
-  }, []);
-  const update = useCallback(
-    (producer: (current: Workspace) => Workspace, record = true) =>
-      setWorkspace((current) => {
-        if (!readyRef.current) return current;
-        const next = producer(workspaceRef.current);
-        workspaceRef.current = next;
-        if (record) {
-          setHistory((stack) => [...stack.slice(-39), current]);
-          setFuture([]);
-        }
-        window.dockyard?.syncDesign(next);
-        if (
-          record ||
-          next.artworks.length !== current.artworks.length ||
-          next.libraryItems !== current.libraryItems ||
-          next.recentProjects !== current.recentProjects
-        )
-          void window.dockyard?.saveWorkspace({ ...next, updatedAt: now() });
-        return next;
-      }),
-    [],
-  );
-  const undo = () =>
-    setHistory((stack) => {
-      const previous = stack.at(-1);
-      if (!previous) return stack;
-      setWorkspace((current) => {
-        setFuture((items) => [...items, current]);
-        workspaceRef.current = previous;
-        window.dockyard?.syncDesign(previous);
-        return previous;
-      });
-      return stack.slice(0, -1);
-    });
-  const redo = () =>
-    setFuture((stack) => {
-      const next = stack.at(-1);
-      if (!next) return stack;
-      setWorkspace((current) => {
-        setHistory((items) => [...items, current]);
-        workspaceRef.current = next;
-        window.dockyard?.syncDesign(next);
-        return next;
-      });
-      return stack.slice(0, -1);
-    });
-  return {
-    workspace,
-    update,
-    save: () =>
-      readyRef.current
-        ? window.dockyard?.saveWorkspace({ ...workspaceRef.current, updatedAt: now() })
-        : Promise.resolve({ ok: false, error: "工作区尚未加载完成" }),
-    undo,
-    redo,
-    canUndo: Boolean(history.length),
-    canRedo: Boolean(future.length),
   };
 }
 function useProjectStatus() {
@@ -517,7 +433,7 @@ function CanvasDialog({
 }
 
 function AnnotatorView() {
-  const { workspace, update } = useWorkspace();
+  const { workspace, update, save, dispatch } = useWorkspace();
   const viewportChannel = useMemo(() => createViewportChannel({ zoom: 1, scrollX: 0, scrollY: 0, width: 0, height: 0 }), []);
   const [status, setStatus] = useState("");
   const [artworkPickerOpen, setArtworkPickerOpen] = useState(false);
@@ -528,6 +444,36 @@ function AnnotatorView() {
     componentCount: number;
   } | null>(null);
   const artwork = activeArtwork(workspace);
+  const delivery = useMemo(
+    () =>
+      createDeliveryModule({
+        captureImage: async () => {
+          document.body.classList.add("dockyard-exporting");
+          try {
+            return await window.dockyard?.captureViewport() || null;
+          } finally {
+            document.body.classList.remove("dockyard-exporting");
+          }
+        },
+        writeClipboard: (value) => navigator.clipboard.writeText(value),
+        copyImage: async (dataUrl) => {
+          const blob = await fetch(dataUrl).then((response) => response.blob());
+          await navigator.clipboard.write([
+            new ClipboardItem({ [blob.type || "image/png"]: blob }),
+          ]);
+        },
+        download: (value, fileName) => {
+          const link = document.createElement("a");
+          link.href = value;
+          link.download = fileName;
+          link.click();
+        },
+        completeArtwork: (payload) =>
+          window.dockyard?.completeArtwork({ ...payload, persistOnly: true }) ||
+          Promise.resolve({ ok: false, error: "完成记录接口不可用" }),
+      }),
+    [],
+  );
   useEffect(() => () => viewportChannel.dispose(), [viewportChannel]);
   useEffect(() => {
     if (!status) return;
@@ -562,8 +508,8 @@ function AnnotatorView() {
             ),
           }
         : workspace;
-    if (preview) update(() => next, false);
-    const result = await window.dockyard?.saveWorkspace(next);
+    if (preview) await update(() => next, false);
+    const result = await save();
     if (!silent) {
       if (result?.ok) {
         setStatus("已保存到 Dockyard");
@@ -622,52 +568,76 @@ function AnnotatorView() {
   };
   const copyComponents = async () => {
     if (!artwork) return;
-    const text = componentManifest(artwork.components);
-    try {
-      await navigator.clipboard.writeText(text);
-      setStatus("组件信息已复制");
-    } catch {
-      setStatus("组件信息复制失败");
-    }
+    const result = await delivery.execute({
+      type: "component-list",
+      target: "clipboard",
+      artworkId: artwork.id,
+      artworkName: artwork.name,
+      componentsText: componentManifest(artwork.components),
+    });
+    setStatus(result.ok ? "组件信息已复制" : result.error);
+  };
+  const copyImage = async () => {
+    if (!artwork) return;
+    const result = await delivery.execute({
+      type: "image",
+      target: "clipboard",
+      artworkId: artwork.id,
+      artworkName: artwork.name,
+      componentsText: componentManifest(artwork.components),
+    });
+    setStatus(result.ok ? "图片已复制" : result.error);
+  };
+  const exportComponents = async () => {
+    if (!artwork) return;
+    const result = await delivery.execute({
+      type: "component-list",
+      target: "download",
+      artworkId: artwork.id,
+      artworkName: artwork.name,
+      componentsText: componentManifest(artwork.components),
+    });
+    setStatus(result.ok ? "组件清单已导出" : result.error);
   };
   const completeCurrentArtwork = async () => {
     if (!artwork) return;
     setStatus("正在生成完成记录…");
     try {
-      const saved = await saveNow(true);
-      if (!saved?.ok) throw new Error(saved?.error || "保存当前稿件失败");
-      document.body.classList.add("dockyard-exporting");
-      const previewDataUrl = await window.dockyard?.captureViewport();
-      if (!previewDataUrl) throw new Error("无法导出当前画布");
-      const result = await window.dockyard?.completeArtwork({
+      const result = await delivery.execute({
+        type: "complete",
         artworkId: artwork.id,
-        previewDataUrl,
+        artworkName: artwork.name,
         componentsText: componentManifest(artwork.components),
       });
-      if (!result?.ok) throw new Error(result?.error || "完成记录生成失败");
+      if (!result.ok) throw new Error(result.error);
+      const stored = await dispatch({
+        type: "complete-artwork",
+        artworkId: artwork.id,
+        completedAt: new Date().toISOString(),
+        previewDataUrl: result.previewDataUrl || "",
+        componentsText: componentManifest(artwork.components),
+        record: result.record as Artwork["record"],
+      });
+      if (!stored.ok) throw new Error(stored.error);
       setStatus("已生成完成记录");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "完成记录生成失败");
-    } finally {
-      document.body.classList.remove("dockyard-exporting");
     }
   };
   const exportDelivery = async () => {
     if (!artwork) return;
     try {
-      document.body.classList.add("dockyard-exporting");
-      const dataUrl = await window.dockyard?.captureViewport();
-      if (!dataUrl) throw new Error("无法导出当前画布");
-      const link = document.createElement("a");
-      link.href = dataUrl;
-      link.download = `${artwork.name}-开发素材.png`;
-      link.click();
-      await copyComponents();
-      setStatus("开发图片已导出，组件信息已复制");
+      const result = await delivery.execute({
+        type: "image",
+        target: "download",
+        artworkId: artwork.id,
+        artworkName: `${artwork.name}-开发素材`,
+        componentsText: componentManifest(artwork.components),
+      });
+      if (!result.ok) throw new Error(result.error);
+      setStatus("开发图片已导出");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "开发素材导出失败");
-    } finally {
-      document.body.classList.remove("dockyard-exporting");
     }
   };
   const dropCandidate = (
@@ -837,7 +807,9 @@ function AnnotatorView() {
                 onChooseArtwork={() => setArtworkPickerOpen(true)}
                 onSave={() => void saveNow()}
                 onExportDelivery={() => void exportDelivery()}
-                onCopyComponents={() => void copyComponents()}
+      onCopyComponents={() => void copyComponents()}
+      onExportComponents={() => void exportComponents()}
+      onCopyImage={() => void copyImage()}
                 onComplete={() => void completeCurrentArtwork()}
               />
             </>
