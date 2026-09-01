@@ -422,10 +422,11 @@ select:focus-visible {
 .record-viewer { display: grid; gap: 16px; max-height: 70vh; overflow: auto; }
 .record-viewer img { display: block; max-width: 100%; border: 1px solid var(--color-border-default); border-radius: 8px; }
 .record-viewer pre { margin: 0; white-space: pre-wrap; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.component-inventory { position: absolute; right: 16px; bottom: 44px; z-index: 30; }
-.component-inventory-trigger { display: grid !important; place-items: center; width: 40px; height: 40px; padding: 0 !important; border: 0 !important; border-radius: 8px; color: var(--color-text-primary); background: var(--color-primary-lightest, #ececf8); cursor: pointer; box-shadow: none !important; }
-.component-inventory-trigger:hover, .component-remove-button:hover, .component-inventory-actions button:hover { background: var(--button-hover-bg, var(--color-surface-high)); }
-.component-inventory-trigger:active { background: var(--button-hover-bg, var(--color-surface-high)); border: 1px solid var(--button-active-border, transparent) !important; }
+.component-inventory { position: absolute; right: 64px; bottom: 16px; z-index: 30; }
+.component-inventory-trigger { display: grid !important; place-items: center; width: 40px; height: 40px; padding: 0 !important; border: 0 !important; border-radius: 8px; color: var(--color-text-primary); background-color: var(--color-primary-lightest, #ececf8) !important; cursor: pointer; box-shadow: none !important; opacity: 1 !important; }
+.component-inventory-trigger:hover, .component-inventory-trigger:focus-visible { background-color: var(--color-surface-raised, #e4e4f2) !important; opacity: 1 !important; }
+.component-inventory-trigger:active { background-color: var(--color-surface-raised, #e4e4f2) !important; border: 1px solid var(--button-active-border, #6c63d9) !important; }
+.component-remove-button:hover, .component-inventory-actions button:hover { background-color: var(--color-surface-raised, #e4e4f2); }
 .component-inventory-panel { position: absolute; right: 0; bottom: 48px; width: 280px; max-height: min(60vh, 420px); padding: 12px; overflow: auto; border: 1px solid var(--color-border-default); border-radius: 10px; background: var(--color-surface); box-shadow: 0 8px 24px rgb(0 0 0 / 12%); }
 .component-inventory-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 13px; }
 .component-inventory-header span { color: var(--color-text-muted); font-size: 11px; }
