@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Copy, Minus, PanelsTopLeft } from "lucide-react";
 import { Button } from "@excalidraw/excalidraw";
 import type { ComponentInstance } from "../types";
@@ -15,9 +15,47 @@ export function ComponentInventory({
   onCopy: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const panelId = "dockyard-current-components";
+
+  useLayoutEffect(() => {
+    const updatePosition = () => {
+      const container = containerRef.current;
+      const help = document.querySelector<HTMLElement>(".excalidraw .help-icon");
+      if (!container || !help) return;
+      const containerRect = container.parentElement?.getBoundingClientRect();
+      const helpRect = help.getBoundingClientRect();
+      if (!containerRect) return;
+      setAnchor((current) => {
+        const next = {
+          left: helpRect.left - containerRect.left - 48,
+          top: helpRect.top - containerRect.top,
+        };
+        return current && Math.abs(current.left - next.left) < 0.5 && Math.abs(current.top - next.top) < 0.5
+          ? current
+          : next;
+      });
+    };
+    updatePosition();
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(document.documentElement);
+    const mutationObserver = new MutationObserver(updatePosition);
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      observer.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, []);
+
   return (
-    <div className="component-inventory">
+    <div
+      ref={containerRef}
+      className="component-inventory"
+      style={anchor ? { left: anchor.left, top: anchor.top, right: "auto", bottom: "auto" } : undefined}
+    >
       <Button
         type="button"
         className="component-inventory-trigger"
