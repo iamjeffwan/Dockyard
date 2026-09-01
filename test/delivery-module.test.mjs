@@ -48,7 +48,7 @@ test("组件清单导出和复制使用同一份清单", async () => {
   await delivery.execute({ type: "component-list", target: "clipboard", ...context });
 
   assert.deepEqual(ports.calls, [
-    ["download", "data:text/plain;charset=utf-8,%5B1%5D%20Avatar", "登录页-组件清单.txt"],
+    ["download", "data:text/plain;charset=utf-8,%5B1%5D%20Avatar", "登录页.components.md"],
     ["clipboard", "[1] Avatar"],
   ]);
 });

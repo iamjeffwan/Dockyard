@@ -7,6 +7,7 @@ export type DeliveryCommand =
       artworkId: string;
       artworkName: string;
       componentsText: string;
+      imageDataUrl?: string;
     }
   | {
       type: "component-list";
@@ -56,13 +57,15 @@ export function createDeliveryModule(ports: DeliveryPorts): DeliveryModule {
           } else {
             ports.download(
               `data:text/plain;charset=utf-8,${encodeURIComponent(command.componentsText)}`,
-              `${command.artworkName}-组件清单.txt`,
+              `${command.artworkName}.components.md`,
             );
           }
           return { ok: true };
         }
 
-        const image = await ports.captureImage();
+        const image = command.type === "image" && command.imageDataUrl
+          ? command.imageDataUrl
+          : await ports.captureImage();
         if (!image) return { ok: false, error: "无法导出当前画布" };
 
         if (command.type === "image") {

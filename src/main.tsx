@@ -21,7 +21,6 @@ import {
   Plus,
   Save,
   Search,
-  Send,
   ShieldCheck,
   Trash2,
   WandSparkles,
@@ -53,6 +52,7 @@ import {
   createViewportChannel,
 } from "./overlay";
 import { createDeliveryModule } from "./delivery/module";
+import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
 import { useWorkspace } from "./workspace/useWorkspace";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
@@ -75,31 +75,21 @@ function CanvasMainMenu({
   hasArtwork,
   onChooseArtwork,
   onSave,
-  onExportDelivery,
-  onCopyComponents,
-  onExportComponents,
-  onCopyImage,
+  onExportImage,
   onComplete,
 }: {
   hasArtwork: boolean;
   onChooseArtwork: () => void;
   onSave: () => void;
-  onExportDelivery: () => void;
-  onCopyComponents: () => void;
-  onExportComponents: () => void;
-  onCopyImage: () => void;
+  onExportImage: () => void;
   onComplete: () => void;
 }) {
   return (
     <MainMenu>
       <MainMenu.Item icon={<FolderOpen size={16} />} onSelect={onChooseArtwork}>选择图稿</MainMenu.Item>
-      <MainMenu.DefaultItems.SaveAsImage />
       <MainMenu.Separator />
       <MainMenu.Item icon={<Save size={16} />} onSelect={onSave} disabled={!hasArtwork}>保存到 Dockyard</MainMenu.Item>
-      <MainMenu.Item icon={<Send size={16} />} onSelect={onExportDelivery} disabled={!hasArtwork}>导出开发素材</MainMenu.Item>
-      <MainMenu.Item icon={<ImagePlus size={16} />} onSelect={onCopyImage} disabled={!hasArtwork}>复制图片</MainMenu.Item>
-      <MainMenu.Item icon={<FileCode2 size={16} />} onSelect={onExportComponents} disabled={!hasArtwork}>导出组件清单</MainMenu.Item>
-      <MainMenu.Item icon={<FileCode2 size={16} />} onSelect={onCopyComponents} disabled={!hasArtwork}>复制组件信息</MainMenu.Item>
+      <MainMenu.Item icon={<ImagePlus size={16} />} onSelect={onExportImage} disabled={!hasArtwork}>导出图片</MainMenu.Item>
       <MainMenu.Item icon={<Check size={16} />} onSelect={onComplete} disabled={!hasArtwork}>完成并记录</MainMenu.Item>
       <MainMenu.Separator />
       <MainMenu.DefaultItems.SearchMenu />
@@ -443,6 +433,8 @@ function AnnotatorView() {
     artworkName: string;
     componentCount: number;
   } | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportPreview, setExportPreview] = useState<string | null>(null);
   const artwork = activeArtwork(workspace);
   const delivery = useMemo(
     () =>
@@ -586,18 +578,52 @@ function AnnotatorView() {
       artworkName: artwork.name,
       componentsText: componentManifest(artwork.components),
     });
-    setStatus(result.ok ? "图片已复制" : result.error);
+    if (!result.ok) throw new Error(result.error);
+    setStatus("图片已复制");
   };
-  const exportComponents = async () => {
+  const removeComponent = (instanceId: string) => {
+    if (!artwork || !window.confirm("确定移除这个组件吗？")) return;
+    updateArtwork((current) => ({
+      ...current,
+      components: current.components.filter((item) => item.instanceId !== instanceId),
+      scene: {
+        ...current.scene,
+        elements: current.scene.elements.filter((element) => element.customData?.componentId !== instanceId),
+        files: Object.fromEntries(Object.entries(current.scene.files || {}).filter(([fileId]) => !current.components.some((item) => item.instanceId === instanceId && item.elementId === fileId))),
+      },
+      updatedAt: now(),
+    }));
+  };
+  const openExportImage = async () => {
     if (!artwork) return;
-    const result = await delivery.execute({
-      type: "component-list",
-      target: "download",
-      artworkId: artwork.id,
-      artworkName: artwork.name,
-      componentsText: componentManifest(artwork.components),
+    setExportDialogOpen(true);
+    document.body.classList.add("dockyard-exporting");
+    try {
+      setExportPreview(await window.dockyard?.captureViewport() || null);
+    } finally {
+      document.body.classList.remove("dockyard-exporting");
+    }
+  };
+  const exportImage = async (options: ExportImageOptions) => {
+    if (!artwork) return;
+    document.body.classList.add("dockyard-exporting");
+    let image: string | null = null;
+    try { image = await window.dockyard?.captureViewport() || null; }
+    finally { document.body.classList.remove("dockyard-exporting"); }
+    if (!image) throw new Error("无法导出当前画布");
+    const scaledImage = options.scale === 1 ? image : await new Promise<string>((resolve, reject) => {
+      const source = new Image();
+      source.onload = () => { const canvas = document.createElement("canvas"); canvas.width = source.naturalWidth * options.scale; canvas.height = source.naturalHeight * options.scale; const context = canvas.getContext("2d"); if (!context) return reject(new Error("无法调整导出倍率")); context.drawImage(source, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/png")); };
+      source.onerror = () => reject(new Error("无法处理导出图片")); source.src = image;
     });
-    setStatus(result.ok ? "组件清单已导出" : result.error);
+    const result = await delivery.execute({ type: "image", target: "download", artworkId: artwork.id, artworkName: artwork.name, componentsText: componentManifest(artwork.components), imageDataUrl: scaledImage });
+    if (!result.ok) throw new Error(result.error);
+    if (options.includeComponents) {
+      const listResult = await delivery.execute({ type: "component-list", target: "download", artworkId: artwork.id, artworkName: artwork.name, componentsText: componentManifest(artwork.components) });
+      if (!listResult.ok) throw new Error(listResult.error);
+    }
+    setStatus(options.includeComponents ? "图片和组件清单已导出" : "图片已导出");
+    setExportDialogOpen(false);
   };
   const completeCurrentArtwork = async () => {
     if (!artwork) return;
@@ -622,22 +648,6 @@ function AnnotatorView() {
       setStatus("已生成完成记录");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "完成记录生成失败");
-    }
-  };
-  const exportDelivery = async () => {
-    if (!artwork) return;
-    try {
-      const result = await delivery.execute({
-        type: "image",
-        target: "download",
-        artworkId: artwork.id,
-        artworkName: `${artwork.name}-开发素材`,
-        componentsText: componentManifest(artwork.components),
-      });
-      if (!result.ok) throw new Error(result.error);
-      setStatus("开发图片已导出");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "开发素材导出失败");
     }
   };
   const dropCandidate = (
@@ -806,10 +816,7 @@ function AnnotatorView() {
                 hasArtwork={Boolean(artwork)}
                 onChooseArtwork={() => setArtworkPickerOpen(true)}
                 onSave={() => void saveNow()}
-                onExportDelivery={() => void exportDelivery()}
-      onCopyComponents={() => void copyComponents()}
-      onExportComponents={() => void exportComponents()}
-      onCopyImage={() => void copyImage()}
+                onExportImage={() => void openExportImage()}
                 onComplete={() => void completeCurrentArtwork()}
               />
             </>
@@ -834,6 +841,8 @@ function AnnotatorView() {
         {artwork && (
           <ComponentInventory
             components={artwork.components}
+            onRemove={removeComponent}
+            onCopyImage={() => void copyImage().catch((error) => setStatus(error instanceof Error ? error.message : "图片复制失败"))}
             onCopy={() => void copyComponents()}
           />
         )}
@@ -843,6 +852,14 @@ function AnnotatorView() {
           </div>
         )}
       </main>
+      <ExportImageDialog
+        open={exportDialogOpen}
+        artworkName={artwork?.name || "图稿"}
+        previewDataUrl={exportPreview}
+        onClose={() => setExportDialogOpen(false)}
+        onExport={exportImage}
+        onCopyImage={async () => { await copyImage(); setExportDialogOpen(false); }}
+      />
       <CanvasDialog
         open={artworkPickerOpen}
         title="选择图稿"
