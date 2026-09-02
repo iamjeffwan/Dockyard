@@ -23,12 +23,12 @@ import type {
   StorybookSource,
   StorybookStory,
   Workspace,
-} from "../types";
-import { StorybookSourceMultiSelect } from "./StorybookSourceMultiSelect";
+} from "../types.js";
+import { StorybookSourceMultiSelect } from "./StorybookSourceMultiSelect.js";
 const recognitionPrompt = "这是一张不完整的 UI 开发草图。请根据轮廓、位置关系、文字区域和交互暗示推测组件类型。优先使用 shadcn/ui 或 Radix UI 等组件库中的标准组件名称。不要生成代码。";
 
 const LazySidebarShell = lazy(async () => {
-  const module = await import("../excalidraw-ui");
+  const module = await import("./ui.js");
   return { default: module.StorybookSidebarShell };
 });
 

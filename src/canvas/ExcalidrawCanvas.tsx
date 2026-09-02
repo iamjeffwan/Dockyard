@@ -27,7 +27,7 @@ const LazyExcalidraw = lazy(async () => {
 });
 
 const LazyLibraryHandler = lazy(async () => {
-  const module = await import("../excalidraw-ui");
+  const module = await import("../excalidraw/ui.js");
   return { default: module.LibraryHandler };
 });
 

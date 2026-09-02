@@ -1,5 +1,5 @@
 import { DismissibleTag, MultiSelect } from "@carbon/react";
-import type { StorybookSource } from "../types";
+import type { StorybookSource } from "../types.js";
 
 function firstWord(value: string) {
   return value.trim().split(/\s+/)[0] || value;

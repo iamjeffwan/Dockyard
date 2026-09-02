@@ -40,11 +40,10 @@ import {
   readImage,
 } from "./canvas";
 import {
-  ComponentInventory,
   PrototypeOverlay,
-  StorybookSidebar,
   createViewportChannel,
 } from "./overlay";
+import { ComponentInventory, StorybookSidebar } from "./excalidraw/index.js";
 import { createDeliveryModule } from "./delivery/module";
 import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
 import { useWorkspace } from "./workspace/useWorkspace";
@@ -61,7 +60,7 @@ const LazyExcalidraw = lazy(async () => {
   return { default: module.Excalidraw };
 });
 const LazySidebarTrigger = lazy(async () => {
-  const module = await import("./excalidraw-ui");
+  const module = await import("./excalidraw/ui.js");
   return { default: module.StorybookSidebarTrigger };
 });
 

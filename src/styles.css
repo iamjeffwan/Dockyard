@@ -422,7 +422,8 @@ select:focus-visible {
 .record-viewer { display: grid; gap: 16px; max-height: 70vh; overflow: auto; }
 .record-viewer img { display: block; max-width: 100%; border: 1px solid var(--color-border-default); border-radius: 8px; }
 .record-viewer pre { margin: 0; white-space: pre-wrap; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.component-inventory { position: absolute; right: 64px; bottom: 16px; z-index: 30; }
+.dockyard-footer-actions-host { display: flex; align-items: center; gap: 8px; }
+.component-inventory { position: relative; z-index: 30; order: -1; }
 .component-inventory-trigger { display: grid !important; place-items: center; width: 40px; height: 40px; padding: 0 !important; border: 0 !important; border-radius: 8px; color: var(--color-text-primary); background-color: var(--color-primary-lightest, #ececf8) !important; cursor: pointer; box-shadow: none !important; opacity: 1 !important; }
 .component-inventory-trigger:hover, .component-inventory-trigger:focus-visible { background-color: var(--color-surface-raised, #e4e4f2) !important; opacity: 1 !important; }
 .component-inventory-trigger:active { background-color: var(--color-surface-raised, #e4e4f2) !important; border: 1px solid var(--button-active-border, #6c63d9) !important; }
