@@ -985,9 +985,14 @@ textarea:focus {
 .storybook-sketch-action-label { display: flex; flex: 1 1 0; min-width: 0; width: 100%; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }
 .storybook-sketch-card > .cds--btn { justify-self: end; min-width: 128px; }
 .storybook-multiselect-shell { position: relative; min-width: 0; }
-.storybook-selected-source-tags { position: absolute; top: 24px; right: 34px; left: 12px; z-index: 2; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 40px; pointer-events: none; }
+.storybook-selected-source-tags { position: absolute; top: 24px; right: 34px; left: 12px; z-index: 2; display: flex; flex-wrap: nowrap; gap: 4px; align-items: center; min-height: 40px; overflow: hidden; pointer-events: none; }
 .storybook-selected-source-tags .cds--tag { pointer-events: auto; }
 .storybook-selected-source-tags .cds--tag-label-tooltip .cds--tooltip-content { display: none; }
+.storybook-source-control > .cds--multi-select .cds--list-box__selection { visibility: hidden; }
+.storybook-source-control.is-compact .storybook-selected-source-tags { display: none; }
+.storybook-source-count-tag { position: absolute; top: 31px; left: 12px; z-index: 2; padding: 4px 8px; border-radius: 999px; color: #fff; background: #525252; font-size: 12px; line-height: 1; pointer-events: none; }
+.storybook-source-tags-measure { position: absolute; top: -9999px; left: -9999px; display: inline-flex; gap: 4px; width: max-content; white-space: nowrap; visibility: hidden; }
+.storybook-source-tags-measure span { box-sizing: border-box; padding: 4px 8px; border: 1px solid transparent; border-radius: 999px; font-size: 12px; line-height: 1; }
 .storybook-sketch-card .storybook-search-sources .cds--tag--filter.cds--tag--high-contrast { display: none; }
 .storybook-sketch-card .cds--multi-select .cds--list-box__selection { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 40px; height: auto; padding-block: 5px; }
 .storybook-sketch-card .cds--multi-select .cds--tag .cds--tag__label { overflow-wrap: anywhere; white-space: normal; }
