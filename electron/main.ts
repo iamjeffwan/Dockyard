@@ -1239,7 +1239,7 @@ async function runStorybookSearch(
     trace(`已读取 ${allCandidates.length} 个原始目录候选`);
     const queryPlan = await runCodexJson<{ terms: string[] }>(
       "storybook-query-terms",
-      "查看附图草图，只生成用于检索 Storybook 原始目录的英文功能词。请覆盖同一功能的常见变体，例如 input、text input、password input、number input、search input、textarea、select、form field。只返回 terms 数组，不要返回目录、解释或代码。",
+      "查看附图草图。先判断草图中的形状、视觉结构、语义和交互状态（例如关闭、取消、提示、消息、确认、导航等），再根据判断结果生成用于检索 Storybook 原始目录的英文组件词。检索词必须来自草图实际表达的组件，不要因为输入框、表单或其他示例而默认生成 input 相关词；只有草图确实表示输入控件时才使用 input。生成 3 到 8 个高相关词，覆盖同一组件的必要常见叫法。只返回 terms 数组，不要返回目录、解释或代码。",
       storybookQuerySchema,
       sketchPath,
       onTrace,
@@ -1254,7 +1254,7 @@ async function runStorybookSearch(
     trace(`本地候选扩展后保留 ${shortlist.length} 个目录`);
     const selection = await runCodexJson<{ matches: Array<{ sourceId: string; path: string }> }>(
       "storybook-selection",
-      `查看附图草图。从下列不同 Storybook 的原始目录中，以高召回率选择所有可能相关的目录。输入框的不同功能变体也要纳入，不要只选择名称恰好等于 Input 的目录。不要改写、翻译或合并 path；只能原样返回 sourceId 和 path。若没有匹配项，返回空数组。候选目录：${JSON.stringify(shortlist)}`,
+      `查看附图草图，并结合前一步根据草图形状、语义和交互状态生成的检索词。从下列不同 Storybook 的原始目录中，以高召回率选择所有可能相关的目录；优先选择与草图表达的组件语义相符的目录，不要把结果默认扩大到 input 或 form。不要改写、翻译或合并 path；只能原样返回 sourceId 和 path。若没有匹配项，返回空数组。检索词：${JSON.stringify(terms)}。候选目录：${JSON.stringify(shortlist)}`,
       storybookMatchSchema,
       sketchPath,
       onTrace,

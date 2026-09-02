@@ -422,13 +422,43 @@ select:focus-visible {
 .record-viewer { display: grid; gap: 16px; max-height: 70vh; overflow: auto; }
 .record-viewer img { display: block; max-width: 100%; border: 1px solid var(--color-border-default); border-radius: 8px; }
 .record-viewer pre { margin: 0; white-space: pre-wrap; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
-.component-inventory { position: absolute; right: 16px; bottom: 16px; z-index: 5; width: 240px; padding: 10px; border: 1px solid var(--color-border-default); border-radius: 10px; background: rgb(255 255 255 / 94%); box-shadow: 0 8px 24px rgb(0 0 0 / 12%); }
-.component-inventory-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; }
-.component-inventory-header button { font-size: 11px; }
-.component-inventory-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--color-border-muted); }
+.component-inventory { position: absolute; right: 64px; bottom: 16px; z-index: 30; }
+.component-inventory-trigger { display: grid !important; place-items: center; width: 40px; height: 40px; padding: 0 !important; border: 0 !important; border-radius: 8px; color: var(--color-text-primary); background-color: var(--color-primary-lightest, #ececf8) !important; cursor: pointer; box-shadow: none !important; opacity: 1 !important; }
+.component-inventory-trigger:hover, .component-inventory-trigger:focus-visible { background-color: var(--color-surface-raised, #e4e4f2) !important; opacity: 1 !important; }
+.component-inventory-trigger:active { background-color: var(--color-surface-raised, #e4e4f2) !important; border: 1px solid var(--button-active-border, #6c63d9) !important; }
+.component-remove-button:hover, .component-inventory-actions button:hover { background-color: var(--color-surface-raised, #e4e4f2); }
+.component-inventory-panel { position: absolute; right: 0; bottom: 48px; width: 280px; max-height: min(60vh, 420px); padding: 12px; overflow: auto; border: 1px solid var(--color-border-default); border-radius: 10px; background: var(--color-surface); box-shadow: 0 8px 24px rgb(0 0 0 / 12%); }
+.component-inventory-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.component-inventory-header span { color: var(--color-text-muted); font-size: 11px; }
+.component-inventory-list { display: grid; gap: 2px; }
+.component-inventory-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) 28px; align-items: center; gap: 8px; min-height: 38px; padding: 5px 6px; border-left: 3px solid transparent; }
+.component-inventory-item:hover { background: var(--color-surface-low); }
 .component-sequence { display: inline-grid; place-items: center; min-width: 24px; height: 18px; border-radius: 9px; background: #d92d20; color: #fff; font-size: 10px; font-weight: 700; }
-.component-inventory-item span:last-child { display: grid; gap: 2px; min-width: 0; }
+.component-inventory-copy { display: grid; gap: 2px; min-width: 0; }
 .component-inventory-item small { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.component-remove-button, .component-inventory-actions button { display: inline-grid; place-items: center; min-width: 28px; height: 28px; border: 0; border-radius: 6px; color: var(--color-text-muted); background: transparent; cursor: pointer; }
+.component-inventory-empty { margin: 12px 4px; color: var(--color-text-muted); font-size: 12px; }
+.component-inventory-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--color-border-muted); }
+.component-inventory-actions button { display: inline-flex; gap: 4px; padding: 0 7px; font-size: 11px; }
+.export-image-dialog { width: min(920px, calc(100vw - 32px)); }
+.export-image-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(240px, .8fr); gap: 20px; padding: 8px 0 4px; }
+.export-image-preview { display: grid; min-height: 280px; place-items: center; overflow: hidden; border: 1px solid var(--color-border-default); border-radius: 8px; background: var(--color-surface-low); }
+.export-image-preview img { display: block; max-width: 100%; max-height: 420px; object-fit: contain; }
+.export-image-settings { display: grid; align-content: start; gap: 14px; padding: 8px 4px; }
+.export-image-settings label { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 14px; }
+.export-image-settings input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--color-accent-primary); }
+.export-image-settings fieldset { margin: 0; padding: 0; border: 0; }
+.export-image-settings legend { margin-bottom: 7px; font-size: 14px; }
+.export-scale-options { display: flex; gap: 5px; }
+.export-scale-options button { min-width: 42px; padding: 6px 9px; border: 1px solid var(--color-border-default); border-radius: 6px; color: var(--color-text-primary); background: var(--color-surface); cursor: pointer; }
+.export-scale-options button.selected { border-color: var(--color-accent-primary); color: var(--color-accent-primary); background: color-mix(in srgb, var(--color-accent-primary) 10%, transparent); }
+.export-image-hint, .export-image-error { display: flex; align-items: center; gap: 5px; margin: 0; font-size: 12px; }
+.export-image-hint { color: var(--color-text-muted); }
+.export-image-error { color: var(--color-danger, #b42318); }
+.export-image-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.export-image-actions button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--color-border-default); border-radius: 6px; background: var(--color-surface); cursor: pointer; }
+.export-image-actions button.primary { color: #fff; border-color: var(--color-accent-primary); background: var(--color-accent-primary); }
+@media (max-width: 680px) { .export-image-layout { grid-template-columns: 1fr; } .export-image-preview { min-height: 200px; } }
 .artwork-picker-item {
   width: 100%;
   min-height: 74px;

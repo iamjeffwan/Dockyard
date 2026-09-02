@@ -244,7 +244,6 @@ export function ExcalidrawCanvas({
           <span>也可在菜单中选择图稿或导入图片</span>
         </div>
       )}
-      {artwork && <div className="canvas-hint">原图已锁定 · 可直接标注和绘图</div>}
     </div>
   );
 }
