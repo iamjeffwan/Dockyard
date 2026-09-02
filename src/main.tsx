@@ -599,7 +599,13 @@ function AnnotatorView() {
     setExportDialogOpen(true);
     document.body.classList.add("dockyard-exporting");
     try {
-      setExportPreview(await window.dockyard?.captureViewport() || null);
+      const preview = await window.dockyard?.captureViewport();
+      if (!preview) throw new Error("无法生成导出预览，请重试");
+      setExportPreview(preview);
+    } catch (error) {
+      setExportPreview(null);
+      setExportDialogOpen(false);
+      setStatus(error instanceof Error && error.message ? error.message : "无法生成导出预览，请重试");
     } finally {
       document.body.classList.remove("dockyard-exporting");
     }

@@ -54,9 +54,9 @@ export function ExportImageDialog({ open, artworkName, previewDataUrl, onClose, 
           <label><span>包含组件信息</span><input type="checkbox" checked={options.includeComponents} onChange={(event) => setOptions({ ...options, includeComponents: event.target.checked })} /></label>
           <label title="当前合成导出固定使用画布背景"><span>背景</span><input type="checkbox" checked={options.background} disabled aria-label="背景（固定）" /></label>
           <fieldset><legend>缩放比例</legend><div className="export-scale-options">{([1, 2, 3] as const).map((scale) => <button type="button" key={scale} className={options.scale === scale ? "selected" : ""} onClick={() => setOptions({ ...options, scale })}>{scale}×</button>)}</div></fieldset>
-          {options.includeComponents && <p className="export-image-hint"><Check size={14} />将同时保存同名组件清单</p>}
+          {options.includeComponents && <p className="export-image-hint"><Check size={14} aria-hidden="true" />将同时保存同名组件清单</p>}
           {error && <p className="export-image-error" role="alert">{error}</p>}
-          <div className="export-image-actions"><button type="button" onClick={() => void run("copy")} disabled={Boolean(busy) || !previewDataUrl}><Copy size={15} />复制图片</button><button type="button" className="primary" onClick={() => void run("export")} disabled={Boolean(busy) || !previewDataUrl}><Download size={15} />{busy === "export" ? "导出中…" : "导出 PNG"}</button></div>
+          <div className="export-image-actions"><button type="button" onClick={() => void run("copy")} disabled={Boolean(busy) || !previewDataUrl}><Copy size={15} aria-hidden="true" />复制图片</button><button type="button" className="primary" onClick={() => void run("export")} disabled={Boolean(busy) || !previewDataUrl}><Download size={15} aria-hidden="true" />{busy === "export" ? "导出中…" : "导出 PNG"}</button></div>
         </div>
       </div>
     </section>

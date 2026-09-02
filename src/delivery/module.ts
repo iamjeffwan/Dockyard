@@ -56,7 +56,7 @@ export function createDeliveryModule(ports: DeliveryPorts): DeliveryModule {
             await ports.writeClipboard(command.componentsText);
           } else {
             ports.download(
-              `data:text/plain;charset=utf-8,${encodeURIComponent(command.componentsText)}`,
+              `data:text/markdown;charset=utf-8,${encodeURIComponent(command.componentsText)}`,
               `${command.artworkName}.components.md`,
             );
           }

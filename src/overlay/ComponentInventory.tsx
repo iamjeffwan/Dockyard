@@ -17,13 +17,18 @@ export function ComponentInventory({
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const helpRef = useRef<HTMLElement | null>(null);
+  const frameRef = useRef<number | null>(null);
   const panelId = "dockyard-current-components";
 
   useLayoutEffect(() => {
     const updatePosition = () => {
       const container = containerRef.current;
-      const help = document.querySelector<HTMLElement>(".excalidraw .help-icon");
+      const help = helpRef.current || document.querySelector<HTMLElement>(".excalidraw .help-icon");
       if (!container || !help) return;
+      helpRef.current = help;
+      observer?.observe(help);
+      mutationObserver?.disconnect();
       const containerRect = container.parentElement?.getBoundingClientRect();
       const helpRect = help.getBoundingClientRect();
       if (!containerRect) return;
@@ -37,16 +42,41 @@ export function ComponentInventory({
           : next;
       });
     };
-    updatePosition();
-    const observer = new ResizeObserver(updatePosition);
-    observer.observe(document.documentElement);
-    const mutationObserver = new MutationObserver(updatePosition);
-    mutationObserver.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener("resize", updatePosition);
+    const scheduleUpdate = () => {
+      if (frameRef.current !== null) return;
+      frameRef.current = window.requestAnimationFrame(() => {
+        frameRef.current = null;
+        updatePosition();
+      });
+    };
+    const host = containerRef.current?.parentElement;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleUpdate);
+    if (host) observer?.observe(host);
+    if (helpRef.current) observer?.observe(helpRef.current);
+    const mutationObserver = host ? new MutationObserver(() => {
+      if (helpRef.current) {
+        mutationObserver?.disconnect();
+        return;
+      }
+      scheduleUpdate();
+      const help = host.querySelector<HTMLElement>(".excalidraw .help-icon");
+      if (help) {
+        helpRef.current = help;
+        observer?.observe(help);
+        mutationObserver?.disconnect();
+      }
+    }) : null;
+    if (host && !helpRef.current) mutationObserver?.observe(host, { childList: true, subtree: true });
+    const onScroll = () => scheduleUpdate();
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate);
+    host?.addEventListener("scroll", onScroll, true);
     return () => {
-      observer.disconnect();
-      mutationObserver.disconnect();
-      window.removeEventListener("resize", updatePosition);
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      observer?.disconnect();
+      mutationObserver?.disconnect();
+      window.removeEventListener("resize", scheduleUpdate);
+      host?.removeEventListener("scroll", onScroll, true);
     };
   }, []);
 
