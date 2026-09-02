@@ -19,6 +19,7 @@ export function ComponentInventory({
   const containerRef = useRef<HTMLDivElement>(null);
   const helpRef = useRef<HTMLElement | null>(null);
   const frameRef = useRef<number | null>(null);
+  const findHelpFrameRef = useRef<number | null>(null);
   const panelId = "dockyard-current-components";
 
   useLayoutEffect(() => {
@@ -28,7 +29,6 @@ export function ComponentInventory({
       if (!container || !help) return;
       helpRef.current = help;
       observer?.observe(help);
-      mutationObserver?.disconnect();
       const containerRect = container.parentElement?.getBoundingClientRect();
       const helpRect = help.getBoundingClientRect();
       if (!containerRect) return;
@@ -53,28 +53,27 @@ export function ComponentInventory({
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleUpdate);
     if (host) observer?.observe(host);
     if (helpRef.current) observer?.observe(helpRef.current);
-    const mutationObserver = host ? new MutationObserver(() => {
-      if (helpRef.current) {
-        mutationObserver?.disconnect();
-        return;
-      }
-      scheduleUpdate();
+    let attempts = 0;
+    const findHelp = () => {
+      if (helpRef.current || !host || attempts++ >= 120) return;
       const help = host.querySelector<HTMLElement>(".excalidraw .help-icon");
       if (help) {
         helpRef.current = help;
         observer?.observe(help);
-        mutationObserver?.disconnect();
+        scheduleUpdate();
+        return;
       }
-    }) : null;
-    if (host && !helpRef.current) mutationObserver?.observe(host, { childList: true, subtree: true });
+      findHelpFrameRef.current = window.requestAnimationFrame(findHelp);
+    };
+    if (!helpRef.current) findHelp();
     const onScroll = () => scheduleUpdate();
     scheduleUpdate();
     window.addEventListener("resize", scheduleUpdate);
     host?.addEventListener("scroll", onScroll, true);
     return () => {
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      if (findHelpFrameRef.current !== null) window.cancelAnimationFrame(findHelpFrameRef.current);
       observer?.disconnect();
-      mutationObserver?.disconnect();
       window.removeEventListener("resize", scheduleUpdate);
       host?.removeEventListener("scroll", onScroll, true);
     };
