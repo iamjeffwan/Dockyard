@@ -9,9 +9,7 @@ import React, {
 import { createPortal } from "react-dom";
 import {
   Button,
-  DismissibleTag,
   IconButton,
-  MultiSelect,
   Search as CarbonSearch,
   Select,
   SelectItem,
@@ -26,6 +24,7 @@ import type {
   StorybookStory,
   Workspace,
 } from "../types";
+import { StorybookSourceMultiSelect } from "./StorybookSourceMultiSelect";
 const recognitionPrompt = "这是一张不完整的 UI 开发草图。请根据轮廓、位置关系、文字区域和交互暗示推测组件类型。优先使用 shadcn/ui 或 Radix UI 等组件库中的标准组件名称。不要生成代码。";
 
 const LazySidebarShell = lazy(async () => {
@@ -120,7 +119,6 @@ export function StorybookSidebar({
   }, [groups, searchSourceIds, sources, storybookResult]);
   const selectedStory = useMemo(() => (catalog?.stories || []).find((story) => story.id === selection?.storyId), [catalog, selection?.storyId]);
   const selectedSource = sources.find((source) => source.id === selection?.sourceId);
-  const firstWord = (value: string) => value.trim().split(/\s+/)[0] || value;
   const selectedSearchSources = sources.filter((source) => searchSourceIds.includes(source.id));
   const captureSketch = async () => {
     if (!excalidrawAPI) return;
@@ -284,7 +282,7 @@ export function StorybookSidebar({
                 </IconButton>
                 <CarbonSearch id="storybook-search" labelText="查找组件或故事" placeholder="查找组件或故事" value={query} onChange={(event) => setQuery(event.target.value)} size="sm" />
               </div>
-              <div className="storybook-source-control"><MultiSelect id="storybook-source-filter" titleText="组件来源" label={selectedSearchSources.length > 0 ? "" : "（可多选）"} items={sources} itemToString={(item) => firstWord(item?.name || "")} selectedItems={selectedSearchSources} onChange={({ selectedItems }) => setSearchSourceIds((selectedItems || []).map((source) => source.id))} /></div>
+              <StorybookSourceMultiSelect sources={sources} selectedSources={selectedSearchSources} onChange={setSearchSourceIds} />
               {storybookResult && <div className="storybook-search-mode">涂鸦匹配 <Button kind="ghost" size="sm" onClick={() => setStorybookResult(null)}>返回完整组件库</Button></div>}
             </div>
             <div className="storybook-list-section">
