@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("dockyard", {
     ipcRenderer.invoke("codex:search", payload),
   runStorybookSearch: (payload: unknown) =>
     ipcRenderer.invoke("codex:storybook-search", payload),
+  recognizeModel: (payload: unknown) => ipcRenderer.invoke("model:recognize", payload),
+  saveModelAbRun: (record: unknown) => ipcRenderer.invoke("model-ab:save", record),
   onCodexTrace: (listener: (trace: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, trace: unknown) =>
       listener(trace);
@@ -40,10 +42,10 @@ contextBridge.exposeInMainWorld("dockyard", {
     ipcRenderer.invoke("storybook:measure-frame", storyUrl),
   captureViewport: () => ipcRenderer.invoke("artwork:capture-viewport"),
   openPanel: (
-    view: "annotator" | "component-search" | "tokens" | "decisions",
+    view: "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test",
   ) => ipcRenderer.invoke("panel:open", view),
   closePanel: (
-    view: "annotator" | "component-search" | "tokens" | "decisions",
+    view: "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test",
   ) => ipcRenderer.invoke("panel:close", view),
   showBar: () => ipcRenderer.invoke("bar:show"),
   hideBar: () => ipcRenderer.invoke("bar:hide"),

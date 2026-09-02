@@ -30,10 +30,12 @@ import {
   loggerDirectory,
   writeLog,
 } from "./logger.js";
+import { invokeCodexSdk } from "./codex-sdk-model.js";
+import { failedRecognition, normalizeRecognitionOutput, recognitionInvocationId, recognitionSchema, type ModelAbRunRecord, type ModelRecognitionResult } from "./model-recognition.js";
 import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types";
 
 const execFileAsync = promisify(execFile);
-type View = "annotator" | "component-search" | "tokens" | "decisions";
+type View = "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test";
 const now = () => new Date().toISOString();
 const uid = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
@@ -762,10 +764,10 @@ function openPanel(view: View) {
   }
   const panel = new BrowserWindow({
     width:
-      view === "annotator" ? 1180 : view === "component-search" ? 980 : 600,
+      view === "annotator" ? 1180 : view === "component-search" ? 980 : view === "model-ab-test" ? 1100 : 600,
     height: 780,
     minWidth:
-      view === "annotator" ? 900 : view === "component-search" ? 760 : 560,
+      view === "annotator" ? 900 : view === "component-search" ? 760 : view === "model-ab-test" ? 900 : 560,
     minHeight: 620,
     frame: true,
     autoHideMenuBar: process.platform === "win32",
@@ -777,6 +779,8 @@ function openPanel(view: View) {
         ? "画板"
         : view === "component-search"
           ? "组件检索"
+          : view === "model-ab-test"
+            ? "模型识别对比"
           : view === "tokens"
             ? "设计令牌"
             : "设计决策",
@@ -1114,6 +1118,36 @@ function loadCodexConfig() {
   if (config.enabled !== true)
     throw new Error(`组件检索模型尚未启用，请将 enabled 改为 true：${path}`);
   return config;
+}
+
+function modelAbRoot() {
+  const root = join(dataRoot(), "model-ab-tests");
+  mkdirSync(root, { recursive: true });
+  return root;
+}
+
+async function runModelRecognition(input: { imageDataUrl: string; prompt: string; mode: "cli" | "sdk" }): Promise<ModelRecognitionResult> {
+  const startedAt = Date.now();
+  const imageKey = createHash("sha256").update(input.imageDataUrl).digest("hex").slice(0, 16);
+  const imagePath = join(modelAbRoot(), `input-${imageKey}.png`);
+  dataUrlToFile(input.imageDataUrl, imagePath);
+  try {
+    const config = loadCodexConfig();
+    if (input.mode === "sdk") return await invokeCodexSdk({ imagePath, prompt: input.prompt }, config, process.cwd());
+    const result = await invokeCodexCliStructured(
+      { artifactDirectory: modelAbRoot(), workingDirectory: process.cwd(), config },
+      { invocationId: recognitionInvocationId("cli"), prompt: input.prompt, outputSchema: recognitionSchema, imagePaths: [imagePath] },
+    );
+    return normalizeRecognitionOutput("cli", result.output, Date.now() - startedAt, { source: "unavailable" });
+  } catch (error) {
+    return failedRecognition(input.mode, error, Date.now() - startedAt);
+  }
+}
+
+function saveModelAbRun(record: ModelAbRunRecord) {
+  const path = join(modelAbRoot(), `${record.id}.json`);
+  atomicJson(path, record);
+  return path;
 }
 async function runCodexJson<T>(
   name: string,
@@ -1600,6 +1634,10 @@ app.whenReady().then(() => {
   ipcMain.handle("codex:storybook-search", (event, payload) =>
     runStorybookSearch(payload, (trace) => event.sender.send("codex:trace", trace)),
   );
+  ipcMain.handle("model:recognize", (_event, payload: { imageDataUrl: string; prompt: string; mode: "cli" | "sdk" }) =>
+    runModelRecognition(payload),
+  );
+  ipcMain.handle("model-ab:save", (_event, record: ModelAbRunRecord) => ({ ok: true, path: saveModelAbRun(record) }));
   ipcMain.handle("codex:logs-open", () => shell.openPath(candidateCacheRoot()));
   ipcMain.handle("diagnostics:logs-open", () => shell.openPath(loggerDirectory()));
   ipcMain.handle("component-cache:status", () => clearExpiredCandidateCache());

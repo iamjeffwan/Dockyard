@@ -11,6 +11,7 @@ import type {
   StorybookMeasureResult,
   Workspace,
 } from "./types";
+import type { ModelAbRunRecord, ModelRecognitionResult } from "../electron/model-recognition";
 
 declare global {
   interface Window {
@@ -21,6 +22,8 @@ declare global {
       loadWorkspace: () => Promise<Workspace | null>;
       runCodexSearch: (payload: unknown) => Promise<ComponentSearchResult>;
       runStorybookSearch: (payload: unknown) => Promise<StorybookSearchResult>;
+      recognizeModel: (payload: { imageDataUrl: string; prompt: string; mode: "cli" | "sdk" }) => Promise<ModelRecognitionResult>;
+      saveModelAbRun: (record: ModelAbRunRecord) => Promise<{ ok: boolean; path: string }>;
       onCodexTrace: (listener: (trace: CodexTraceEvent) => void) => () => void;
       openCodexLogs: () => Promise<string>;
       openAppLogs: () => Promise<string>;
@@ -49,10 +52,10 @@ declare global {
       }>;
       syncDesign: (workspace: Workspace) => void;
       openPanel: (
-        view: "annotator" | "component-search" | "tokens" | "decisions",
+        view: "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test",
       ) => Promise<void>;
       closePanel: (
-        view: "annotator" | "component-search" | "tokens" | "decisions",
+        view: "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test",
       ) => Promise<void>;
       showBar: () => Promise<void>;
       hideBar: () => Promise<void>;

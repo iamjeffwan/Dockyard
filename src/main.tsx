@@ -11,6 +11,7 @@ import { createRoot } from "react-dom/client";
 import { MainMenu } from "@excalidraw/excalidraw";
 import {
   Box,
+  FlaskConical,
   Check,
   CircleAlert,
   FileCode2,
@@ -53,6 +54,7 @@ import {
 } from "./overlay";
 import { createDeliveryModule } from "./delivery/module";
 import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
+import { ModelAbTestView } from "./model-ab-test/ModelAbTestView";
 import { useWorkspace } from "./workspace/useWorkspace";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
@@ -187,7 +189,7 @@ function useProjectStatus() {
   return { status, refresh };
 }
 function openPanel(
-  view: "annotator" | "component-search" | "tokens" | "decisions",
+  view: "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test",
 ) {
   void window.dockyard?.openPanel(view);
 }
@@ -366,6 +368,10 @@ function BarView() {
       <button className="bar-context" disabled={!projectStatus.current} onClick={() => openPanel("decisions")}>
         <FileCode2 size={17} />
         <span>决策</span>
+      </button>
+      <button className="bar-context" disabled={!projectStatus.current} onClick={() => openPanel("model-ab-test")}>
+        <FlaskConical size={17} />
+        <span>模型测试</span>
       </button>
       <button
         className="bar-mini"
@@ -1324,6 +1330,7 @@ function App() {
             ? "设计决策"
             : "Dockyard";
   if (view === "component-search") return <ComponentSearchView />;
+  if (view === "model-ab-test") return <ModelAbTestView />;
   if (view === "tokens") return <TokensView />;
   if (view === "decisions") return <DecisionsView />;
   return view === "bar" ? <BarView /> : <AnnotatorView />;
@@ -1333,3 +1340,4 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>,
 );
+

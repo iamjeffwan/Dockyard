@@ -1012,3 +1012,22 @@ textarea:focus {
 .dockyard-exporting .excalidraw .layer-ui__wrapper__footer {
   display: none !important;
 }
+
+.model-ab-page { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 18px; padding: 18px; min-height: calc(100vh - 54px); }
+.model-ab-input, .model-result-card { border: 1px solid var(--color-border-default); border-radius: var(--shape-radius-panel); background: var(--color-surface-panel); padding: 16px; }
+.model-ab-input { display: grid; align-content: start; gap: 12px; }
+.model-ab-input label { display: grid; gap: 6px; color: var(--color-text-muted); font-size: var(--typography-size-sm); }
+.model-ab-input textarea { width: 100%; resize: vertical; border: 1px solid var(--color-border-default); border-radius: var(--shape-radius-control); padding: 9px; color: var(--color-text-primary); background: var(--color-surface-raised); }
+.model-sketch-preview { width: 100%; max-height: 220px; object-fit: contain; border: 1px dashed var(--color-border-default); background: #fff; }
+.model-ab-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.model-ab-actions button { border: 1px solid var(--color-border-default); border-radius: var(--shape-radius-control); padding: 7px 10px; color: var(--color-text-primary); background: var(--color-surface-raised); }
+.model-ab-actions button:first-child { color: #fff; border-color: var(--color-accent-primary); background: var(--color-accent-primary); }
+.model-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-content: start; }
+.model-result-card h3 { margin: 0 0 8px; font-size: var(--typography-size-title); }
+.model-result-card p { color: var(--color-text-muted); font-size: var(--typography-size-sm); }
+.model-component-list { margin: 12px 0; padding-left: 24px; display: grid; gap: 5px; }
+.model-component-list li { color: var(--color-text-primary); }
+.model-muted, .model-status { color: var(--color-text-muted); }
+.model-result-card details { margin-top: 14px; }
+.model-result-card pre { max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: 10px; background: var(--color-surface-raised); font-size: 12px; }
+@media (max-width: 760px) { .model-ab-page, .model-results { grid-template-columns: 1fr; } }
