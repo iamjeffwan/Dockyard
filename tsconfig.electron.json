@@ -9,5 +9,5 @@
     "outDir": "dist-electron",
     "noEmit": false
   },
-  "include": ["electron/**/*.ts"]
+  "include": ["electron/**/*.ts", "electron/**/*.cts"]
 }

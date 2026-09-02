@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, screen, shell, webFrameMain } from "electron";
+import electron from "electron";
+import { fileURLToPath } from "node:url";
 import { get as httpsGet } from "node:https";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -17,6 +18,7 @@ import {
   invokeCodexCliStructured,
   validateCodexCliConfig,
 } from "./codex-cli-model.js";
+import { failedRecognition, normalizeRecognitionOutput, recognitionInvocationId, recognitionSchema, type ModelRecognitionResult } from "./model-recognition.js";
 import { classifyWindowOpen } from "./external-navigation.js";
 import {
   atomicWriteJson as atomicJson,
@@ -30,12 +32,15 @@ import {
   loggerDirectory,
   writeLog,
 } from "./logger.js";
-import { invokeCodexSdk } from "./codex-sdk-model.js";
-import { failedRecognition, normalizeRecognitionOutput, recognitionInvocationId, recognitionSchema, type ModelAbRunRecord, type ModelRecognitionResult } from "./model-recognition.js";
-import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types";
+import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const { app, BrowserWindow, dialog, ipcMain, screen, shell, webFrameMain } = electron;
+type BrowserWindow = Electron.BrowserWindow;
 
 const execFileAsync = promisify(execFile);
-type View = "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test";
+type View = "annotator" | "tokens" | "decisions";
 const now = () => new Date().toISOString();
 const uid = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
@@ -730,7 +735,7 @@ function createBarWindow() {
     skipTaskbar: true,
     show: false,
     webPreferences: {
-      preload: join(__dirname, "preload.js"),
+      preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -763,11 +768,10 @@ function openPanel(view: View) {
     return;
   }
   const panel = new BrowserWindow({
-    width:
-      view === "annotator" ? 1180 : view === "component-search" ? 980 : view === "model-ab-test" ? 1100 : 600,
+    width: view === "annotator" ? 1180 : 600,
     height: 780,
     minWidth:
-      view === "annotator" ? 900 : view === "component-search" ? 760 : view === "model-ab-test" ? 900 : 560,
+      view === "annotator" ? 900 : 560,
     minHeight: 620,
     frame: true,
     autoHideMenuBar: process.platform === "win32",
@@ -775,17 +779,9 @@ function openPanel(view: View) {
     resizable: true,
     alwaysOnTop: false,
     title:
-      view === "annotator"
-        ? "画板"
-        : view === "component-search"
-          ? "组件检索"
-          : view === "model-ab-test"
-            ? "模型识别对比"
-          : view === "tokens"
-            ? "设计令牌"
-            : "设计决策",
+      view === "annotator" ? "画板" : view === "tokens" ? "设计令牌" : "设计决策",
     webPreferences: {
-      preload: join(__dirname, "preload.js"),
+      preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -1120,35 +1116,22 @@ function loadCodexConfig() {
   return config;
 }
 
-function modelAbRoot() {
-  const root = join(dataRoot(), "model-ab-tests");
-  mkdirSync(root, { recursive: true });
-  return root;
-}
-
-async function runModelRecognition(input: { imageDataUrl: string; prompt: string; mode: "cli" | "sdk" }): Promise<ModelRecognitionResult> {
+async function runModelRecognition(input: { imageDataUrl: string; prompt: string }): Promise<ModelRecognitionResult> {
   const startedAt = Date.now();
-  const imageKey = createHash("sha256").update(input.imageDataUrl).digest("hex").slice(0, 16);
-  const imagePath = join(modelAbRoot(), `input-${imageKey}.png`);
+  const imagePath = join(candidateCacheRoot(), `recognition-${randomUUID()}.png`);
   dataUrlToFile(input.imageDataUrl, imagePath);
   try {
     const config = loadCodexConfig();
-    if (input.mode === "sdk") return await invokeCodexSdk({ imagePath, prompt: input.prompt }, config, process.cwd());
     const result = await invokeCodexCliStructured(
-      { artifactDirectory: modelAbRoot(), workingDirectory: process.cwd(), config },
+      { artifactDirectory: candidateCacheRoot(), workingDirectory: process.cwd(), config },
       { invocationId: recognitionInvocationId("cli"), prompt: input.prompt, outputSchema: recognitionSchema, imagePaths: [imagePath] },
     );
     return normalizeRecognitionOutput("cli", result.output, Date.now() - startedAt, { source: "unavailable" });
   } catch (error) {
-    return failedRecognition(input.mode, error, Date.now() - startedAt);
+    return failedRecognition("cli", error, Date.now() - startedAt);
   }
 }
 
-function saveModelAbRun(record: ModelAbRunRecord) {
-  const path = join(modelAbRoot(), `${record.id}.json`);
-  atomicJson(path, record);
-  return path;
-}
 async function runCodexJson<T>(
   name: string,
   prompt: string,
@@ -1628,22 +1611,13 @@ app.whenReady().then(() => {
     workspace = next;
     broadcast();
   });
-  ipcMain.handle("codex:search", (event, payload) =>
-    runCodex(payload, (trace) => event.sender.send("codex:trace", trace)),
-  );
   ipcMain.handle("codex:storybook-search", (event, payload) =>
     runStorybookSearch(payload, (trace) => event.sender.send("codex:trace", trace)),
   );
-  ipcMain.handle("model:recognize", (_event, payload: { imageDataUrl: string; prompt: string; mode: "cli" | "sdk" }) =>
+  ipcMain.handle("model:recognize", (_event, payload: { imageDataUrl: string; prompt: string }) =>
     runModelRecognition(payload),
   );
-  ipcMain.handle("model-ab:save", (_event, record: ModelAbRunRecord) => ({ ok: true, path: saveModelAbRun(record) }));
-  ipcMain.handle("codex:logs-open", () => shell.openPath(candidateCacheRoot()));
   ipcMain.handle("diagnostics:logs-open", () => shell.openPath(loggerDirectory()));
-  ipcMain.handle("component-cache:status", () => clearExpiredCandidateCache());
-  ipcMain.handle("component-cache:clear", () =>
-    clearExpiredCandidateCache(true),
-  );
   ipcMain.handle("artwork:complete", (_event, payload) => completeArtwork(payload));
   ipcMain.handle("project:pick", async () => {
     const result = await dialog.showOpenDialog({

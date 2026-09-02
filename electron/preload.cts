@@ -1,27 +1,24 @@
-import { contextBridge, ipcRenderer } from "electron";
+import electron from "electron";
+
+const { contextBridge, ipcRenderer } = electron;
 
 contextBridge.exposeInMainWorld("dockyard", {
   saveWorkspace: (workspace: unknown) =>
     ipcRenderer.invoke("workspace:save", workspace),
   loadWorkspace: () => ipcRenderer.invoke("workspace:load"),
-  runCodexSearch: (payload: unknown) =>
-    ipcRenderer.invoke("codex:search", payload),
   runStorybookSearch: (payload: unknown) =>
     ipcRenderer.invoke("codex:storybook-search", payload),
-  recognizeModel: (payload: unknown) => ipcRenderer.invoke("model:recognize", payload),
-  saveModelAbRun: (record: unknown) => ipcRenderer.invoke("model-ab:save", record),
+  recognizeSketch: (payload: { imageDataUrl: string; prompt: string }) =>
+    ipcRenderer.invoke("model:recognize", payload),
   onCodexTrace: (listener: (trace: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, trace: unknown) =>
       listener(trace);
     ipcRenderer.on("codex:trace", handler);
     return () => ipcRenderer.removeListener("codex:trace", handler);
   },
-  openCodexLogs: () => ipcRenderer.invoke("codex:logs-open"),
   openAppLogs: () => ipcRenderer.invoke("diagnostics:logs-open"),
   writeLog: (level: "debug" | "info" | "warn" | "error", event: string, context?: Record<string, unknown>) =>
     ipcRenderer.send("diagnostics:log", { level, event, context }),
-  componentCacheStatus: () => ipcRenderer.invoke("component-cache:status"),
-  clearComponentCache: () => ipcRenderer.invoke("component-cache:clear"),
   completeArtwork: (payload: unknown) =>
     ipcRenderer.invoke("artwork:complete", payload),
   pickProject: () => ipcRenderer.invoke("project:pick"),

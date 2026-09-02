@@ -1,6 +1,8 @@
-import { app } from "electron";
+import electron from "electron";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+
+const { app } = electron;
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type LogContext = Record<string, unknown>;

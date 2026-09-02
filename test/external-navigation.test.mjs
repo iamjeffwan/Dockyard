@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyWindowOpen } from "../dist-electron/external-navigation.js";
+import { classifyWindowOpen } from "../dist-electron/electron/external-navigation.js";
 
 test("只允许官方素材库留在 Electron 窗口中", () => {
   assert.equal(

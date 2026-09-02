@@ -7,7 +7,7 @@ import test from "node:test";
 import {
   invokeCodexCliStructured,
   validateCodexCliConfig,
-} from "../dist-electron/codex-cli-model.js";
+} from "../dist-electron/electron/codex-cli-model.js";
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "dockyard-codex-cli-"));

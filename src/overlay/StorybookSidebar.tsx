@@ -26,6 +26,7 @@ import type {
   StorybookStory,
   Workspace,
 } from "../types";
+const recognitionPrompt = "这是一张不完整的 UI 开发草图。请根据轮廓、位置关系、文字区域和交互暗示推测组件类型。优先使用 shadcn/ui 或 Radix UI 等组件库中的标准组件名称。不要生成代码。";
 
 const LazySidebarShell = lazy(async () => {
   const module = await import("../excalidraw-ui");
@@ -72,6 +73,7 @@ export function StorybookSidebar({
   const [sketchOpen, setSketchOpen] = useState(false);
   const [sketchDataUrl, setSketchDataUrl] = useState<string | null>(null);
   const [searchingSketch, setSearchingSketch] = useState(false);
+  const [recognition, setRecognition] = useState<{ components: string[]; rawText: string } | null>(null);
   const [storybookResult, setStorybookResult] = useState<StorybookSearchResult | null>(null);
   const [resizeHandleRect, setResizeHandleRect] = useState<{ left: number; top: number; height: number } | null>(null);
   const [sketchAnchorRect, setSketchAnchorRect] = useState<{ left: number; top: number; bottom: number; height: number } | null>(null);
@@ -133,9 +135,8 @@ export function StorybookSidebar({
   const runSketchSearch = async () => {
     if (!sketchDataUrl || searchingSketch) return;
     setSearchingSketch(true);
-    setStorybookResult(null);
-    const result = await window.dockyard?.runStorybookSearch({ sketchDataUrl, sourceIds: searchSourceIds });
-    setStorybookResult(result || null);
+    const result = await window.dockyard?.recognizeSketch({ imageDataUrl: sketchDataUrl, prompt: recognitionPrompt });
+    setRecognition(result?.status === "success" ? { components: result.components, rawText: result.rawText } : null);
     setSearchingSketch(false);
   };
   useEffect(() => {
@@ -208,25 +209,8 @@ export function StorybookSidebar({
       <strong>涂鸦搜索</strong>
       <div className="storybook-sketch-preview">{sketchDataUrl ? <img src={sketchDataUrl} alt="当前草图选区" /> : "待从画稿获取选区"}</div>
       <div className="storybook-sketch-actions"><Button kind="secondary" size="sm" onClick={() => void captureSketch()}><span className="storybook-sketch-action-label">使用当前选区</span></Button><Button kind="tertiary" size="sm" onClick={() => setSketchDataUrl(null)}><span className="storybook-sketch-action-label">清除草图</span></Button></div>
-      <div className="storybook-multiselect-shell">
-        <MultiSelect
-          id="storybook-search-sources"
-          className="storybook-search-sources"
-          titleText="检索来源"
-          label={selectedSearchSources.length > 0 ? "" : "（可多选）"}
-          items={sources}
-          itemToString={(item) => firstWord(item?.name || "")}
-          selectedItems={selectedSearchSources}
-          onChange={({ selectedItems }) => setSearchSourceIds((selectedItems || []).map((source) => source.id))}
-        />
-        <div className="storybook-selected-source-tags">
-          {selectedSearchSources.map((source) => (
-            <DismissibleTag key={source.id} size="sm" type="high-contrast" text={firstWord(source.name)} title="移除来源" dismissTooltipLabel="移除来源" onClose={() => setSearchSourceIds((ids) => ids.filter((id) => id !== source.id))} />
-          ))}
-        </div>
-      </div>
-      <Button size="sm" disabled={!sketchDataUrl || searchingSketch} onClick={() => void runSketchSearch()}>{searchingSketch ? "正在检索…" : "开始检索"}</Button>
-      {storybookResult?.diagnostics?.map((item) => <small key={item} className="storybook-diagnostic">{item}</small>)}
+      <Button size="sm" disabled={!sketchDataUrl || searchingSketch} onClick={() => void runSketchSearch()}>{searchingSketch ? "正在识别…" : "识别草图"}</Button>
+      {recognition && <div className="storybook-recognition-result"><strong>候选组件</strong>{recognition.components.map((component) => <button key={component} type="button" onClick={() => setQuery(component)}>{component}</button>)}<strong>识别说明</strong><p>{recognition.rawText}</p></div>}
     </div>,
     document.body,
   );
@@ -300,11 +284,7 @@ export function StorybookSidebar({
                 </IconButton>
                 <CarbonSearch id="storybook-search" labelText="查找组件或故事" placeholder="查找组件或故事" value={query} onChange={(event) => setQuery(event.target.value)} size="sm" />
               </div>
-              <div className="storybook-source-control">
-                <Select id="storybook-source-filter" labelText="组件来源" value={sourceId} onChange={(event) => setSourceId(event.target.value)}>
-                  {sources.map((source) => <SelectItem key={source.id} value={source.id} text={source.name} />)}
-                </Select>
-              </div>
+              <div className="storybook-source-control"><MultiSelect id="storybook-source-filter" titleText="组件来源" label={selectedSearchSources.length > 0 ? "" : "（可多选）"} items={sources} itemToString={(item) => firstWord(item?.name || "")} selectedItems={selectedSearchSources} onChange={({ selectedItems }) => setSearchSourceIds((selectedItems || []).map((source) => source.id))} /></div>
               {storybookResult && <div className="storybook-search-mode">涂鸦匹配 <Button kind="ghost" size="sm" onClick={() => setStorybookResult(null)}>返回完整组件库</Button></div>}
             </div>
             <div className="storybook-list-section">
