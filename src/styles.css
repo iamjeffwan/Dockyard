@@ -988,9 +988,9 @@ textarea:focus {
 .storybook-selected-source-tags { position: absolute; top: 24px; right: 34px; left: 12px; z-index: 2; display: flex; flex-wrap: nowrap; gap: 4px; align-items: center; min-height: 40px; overflow: hidden; pointer-events: none; }
 .storybook-selected-source-tags .cds--tag { flex: 0 0 auto; pointer-events: auto; }
 .storybook-selected-source-tags .cds--tag-label-tooltip .cds--tooltip-content { display: none; }
-.storybook-source-control > .cds--multi-select .cds--list-box__selection { visibility: hidden; }
+.storybook-source-control .cds--list-box__field--wrapper > .cds--tag--filter { visibility: hidden; }
+.storybook-source-control.is-compact .cds--list-box__field--wrapper > .cds--tag--filter { visibility: visible; }
 .storybook-source-control.is-compact .storybook-selected-source-tags { visibility: hidden; pointer-events: none; }
-.storybook-source-count-tag { position: absolute; top: 31px; left: 12px; z-index: 2; padding: 4px 8px; border-radius: 999px; color: #fff; background: #525252; font-size: 12px; line-height: 1; pointer-events: none; }
 .storybook-source-tags-measure { position: absolute; top: -9999px; left: -9999px; display: inline-flex; gap: 4px; width: max-content; white-space: nowrap; visibility: hidden; }
 .storybook-source-tags-measure .cds--tag { flex: 0 0 auto; }
 .storybook-sketch-card .storybook-search-sources .cds--tag--filter.cds--tag--high-contrast { display: none; }

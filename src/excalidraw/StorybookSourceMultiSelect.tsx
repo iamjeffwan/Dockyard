@@ -70,7 +70,6 @@ export function StorybookSourceMultiSelect({
           />
         ))}
       </div>
-      {compact && <span className="storybook-source-count-tag" aria-label={`已选择 ${selectedSources.length} 个组件来源`}>{selectedSources.length} ×</span>}
       <div ref={measureRef} className="storybook-source-tags-measure" aria-hidden="true">
         {selectedSources.map((source) => (
           <SourceNameTag
