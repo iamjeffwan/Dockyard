@@ -20,3 +20,17 @@
 - 不把密码、令牌、API Key 或 `.env` 文件写入代码和提交。
 - 删除文件使用 `trash`（可恢复删除）。
 - 面向用户的说明默认使用简洁中文；技术术语首次出现时附中文解释。
+
+## Agent skills
+
+### Issue tracker
+
+本项目使用 GitHub Issues 管理需求和工单。具体操作见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用默认工单分流标签：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。具体映射见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+本项目采用 single-context（单一上下文）布局，领域说明位于根目录 `CONTEXT.md`，架构决策记录位于 `docs/adr/`。具体规则见 `docs/agents/domain.md`。
