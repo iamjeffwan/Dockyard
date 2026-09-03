@@ -32,6 +32,7 @@ import type {
   Workspace,
   StorybookStory,
 } from "./types";
+import { STATIC_SOURCES } from "./static-components/registry.js";
 import {
   ExcalidrawCanvas,
   createImageElement,
@@ -715,7 +716,7 @@ function AnnotatorView() {
       storyTitle: story.title,
       storyUrl: story.storyUrl,
       loadStatus: "loading",
-      ...(staticKey ? { staticModule: { manifestUrl: "/prototypes/static-component-overlay/manifest.json", componentKey: staticKey } } : {}),
+      ...(staticKey ? { sourceLibraryId: "carbon-react", componentKey: staticKey, staticModule: { manifestUrl: STATIC_SOURCES[0].manifestUrl, componentKey: staticKey, version: STATIC_SOURCES[0].version }, categoryPath: ["components", staticKey.replace(/^carbon-/, "")], variantKey: "default" } : {}),
       x,
       y,
       width: 230,
