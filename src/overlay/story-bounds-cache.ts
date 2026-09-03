@@ -7,8 +7,8 @@ export function storyBoundsCacheKey(item: Pick<ComponentInstance, "id" | "source
 export function hasReusableStoryBounds(item: ComponentInstance) {
   return item.boundsSource !== undefined && item.boundsSource !== "fallback"
     && item.boundsCacheKey === storyBoundsCacheKey(item)
-    && Number(item.intrinsicWidth) > 0
-    && Number(item.intrinsicHeight) > 0
+    && (Number(item.naturalWidth) || Number(item.intrinsicWidth)) > 0
+    && (Number(item.naturalHeight) || Number(item.intrinsicHeight)) > 0
     && Number(item.frameViewportWidth) > 0
     && Number(item.frameViewportHeight) > 0;
 }

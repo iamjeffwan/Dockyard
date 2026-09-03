@@ -106,8 +106,8 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
     }
     const scaler = scalerNodesRef.current.get(item.instanceId);
     if (scaler) {
-      const intrinsicWidth = Number(item.intrinsicWidth) || position.width;
-      const intrinsicHeight = Number(item.intrinsicHeight) || position.height;
+      const intrinsicWidth = Number(item.naturalWidth) || Number(item.intrinsicWidth) || position.width;
+      const intrinsicHeight = Number(item.naturalHeight) || Number(item.intrinsicHeight) || position.height;
       scaler.style.width = `${intrinsicWidth}px`;
       scaler.style.height = `${intrinsicHeight}px`;
       scaler.style.transform = `scale(${position.width / intrinsicWidth}, ${position.height / intrinsicHeight})`;
@@ -289,16 +289,31 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
   const applyMeasuredBounds = (item: ComponentInstance, measured: MeasuredBounds, source: "story-dom" | "electron-web-frame-main" | "fallback") => {
     const current = positionsRef.current.get(item.instanceId) || toRuntimePosition(item);
     const isDragging = drag.current?.id === item.instanceId;
+    const preserveUserSize = source !== "fallback" && hasReusableStoryBounds(item);
     const next = {
-      x: isDragging ? current.x : current.x + (current.width - measured.width) / 2,
-      y: isDragging ? current.y : current.y + (current.height - measured.height) / 2,
-      width: measured.width,
-      height: measured.height,
+      x: isDragging || preserveUserSize ? current.x : current.x + (current.width - measured.width) / 2,
+      y: isDragging || preserveUserSize ? current.y : current.y + (current.height - measured.height) / 2,
+      width: preserveUserSize ? current.width : measured.width,
+      height: preserveUserSize ? current.height : measured.height,
       rotation: current.rotation,
     };
     positionsRef.current.set(item.instanceId, next);
     applyPosition(item, next);
-    onCommitRef.current(item.instanceId, { width: measured.width, height: measured.height, x: next.x, y: next.y, intrinsicWidth: measured.width, intrinsicHeight: measured.height, frameViewportWidth: measured.viewportWidth, frameViewportHeight: measured.viewportHeight, contentOffsetX: measured.x, contentOffsetY: measured.y, boundsSource: source, boundsCacheKey: storyBoundsCacheKey(item), loadStatus: "ready" });
+    onCommitRef.current(item.instanceId, {
+      width: measured.width,
+      height: measured.height,
+      x: next.x,
+      y: next.y,
+      intrinsicWidth: measured.width,
+      intrinsicHeight: measured.height,
+      ...(source === "fallback" ? {} : { naturalWidth: measured.width, naturalHeight: measured.height, boundsCacheKey: storyBoundsCacheKey(item) }),
+      frameViewportWidth: measured.viewportWidth,
+      frameViewportHeight: measured.viewportHeight,
+      contentOffsetX: measured.x,
+      contentOffsetY: measured.y,
+      boundsSource: source,
+      loadStatus: "ready",
+    });
   };
 
   const applyFallbackBounds = (item: ComponentInstance) => {
@@ -338,8 +353,8 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
   return <div ref={rootRef} className={`prototype-overlay-layer${altPressed && interactionEnabled ? " is-active" : ""}`} style={{ transform: `translate3d(${initialViewport.scrollX * initialViewport.zoom}px, ${initialViewport.scrollY * initialViewport.zoom}px, 0) scale(${initialViewport.zoom})` }}>
     {stories.map((item) => {
       const position = positionsRef.current.get(item.instanceId) || toRuntimePosition(item);
-      const intrinsicWidth = Number(item.intrinsicWidth) || position.width;
-      const intrinsicHeight = Number(item.intrinsicHeight) || position.height;
+      const intrinsicWidth = Number(item.naturalWidth) || Number(item.intrinsicWidth) || position.width;
+      const intrinsicHeight = Number(item.naturalHeight) || Number(item.intrinsicHeight) || position.height;
       const frameWidth = Number(item.frameViewportWidth) || intrinsicWidth;
       const frameHeight = Number(item.frameViewportHeight) || intrinsicHeight;
       const labelAnchor = rotatePoint(-30, -17, position.width / 2, position.height / 2, position.rotation);

@@ -140,6 +140,8 @@ export type ComponentInstance = Candidate & {
   loadStatus?: "loading" | "ready" | "unavailable";
   intrinsicWidth?: number;
   intrinsicHeight?: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
   frameViewportWidth?: number;
   frameViewportHeight?: number;
   contentOffsetX?: number;
