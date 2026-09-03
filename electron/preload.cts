@@ -39,10 +39,10 @@ contextBridge.exposeInMainWorld("dockyard", {
     ipcRenderer.invoke("storybook:measure-frame", storyUrl),
   captureViewport: () => ipcRenderer.invoke("artwork:capture-viewport"),
   openPanel: (
-    view: "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test",
+    view: "annotator" | "tokens" | "decisions",
   ) => ipcRenderer.invoke("panel:open", view),
   closePanel: (
-    view: "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test",
+    view: "annotator" | "tokens" | "decisions",
   ) => ipcRenderer.invoke("panel:close", view),
   showBar: () => ipcRenderer.invoke("bar:show"),
   hideBar: () => ipcRenderer.invoke("bar:hide"),

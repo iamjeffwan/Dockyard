@@ -8,7 +8,7 @@ import type {
   StorybookMeasureResult,
   Workspace,
 } from "./types";
-import type { ModelRecognitionResult } from "../electron/model-recognition";
+import type { ModelRecognitionResult } from "../electron/model-recognition.js";
 
 declare global {
   interface Window {
