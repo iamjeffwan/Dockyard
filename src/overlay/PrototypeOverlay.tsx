@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { ComponentInstance, MeasuredBounds, StorybookMeasureResult } from "../types";
 import { resizeFromCorner, snapRotation, type DragSession } from "./geometry";
+import { hasReusableStoryBounds, storyBoundsCacheKey } from "./story-bounds-cache.js";
 import type { ViewportChannel, ViewportSnapshot } from "./viewport-channel";
 import "./styles.css";
 
@@ -297,7 +298,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
     };
     positionsRef.current.set(item.instanceId, next);
     applyPosition(item, next);
-    onCommitRef.current(item.instanceId, { width: measured.width, height: measured.height, x: next.x, y: next.y, intrinsicWidth: measured.width, intrinsicHeight: measured.height, frameViewportWidth: measured.viewportWidth, frameViewportHeight: measured.viewportHeight, contentOffsetX: measured.x, contentOffsetY: measured.y, boundsSource: source, loadStatus: "ready" });
+    onCommitRef.current(item.instanceId, { width: measured.width, height: measured.height, x: next.x, y: next.y, intrinsicWidth: measured.width, intrinsicHeight: measured.height, frameViewportWidth: measured.viewportWidth, frameViewportHeight: measured.viewportHeight, contentOffsetX: measured.x, contentOffsetY: measured.y, boundsSource: source, boundsCacheKey: storyBoundsCacheKey(item), loadStatus: "ready" });
   };
 
   const applyFallbackBounds = (item: ComponentInstance) => {
@@ -307,7 +308,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
   const measureWithElectron = (item: ComponentInstance) => {
     const request = window.dockyard?.storybookMeasureFrame;
     if (!request || !item.storyUrl) {
-      applyFallbackBounds(item);
+      if (!hasReusableStoryBounds(item)) applyFallbackBounds(item);
       return;
     }
     const delays = [0, 250, 750, 1500];
@@ -320,7 +321,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
           if (result.reason !== "frame-not-found" && result.reason !== "navigation-failed") break;
         } catch { break; }
       }
-      applyFallbackBounds(item);
+      if (!hasReusableStoryBounds(item)) applyFallbackBounds(item);
     })();
   };
 
@@ -342,7 +343,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
       const frameWidth = Number(item.frameViewportWidth) || intrinsicWidth;
       const frameHeight = Number(item.frameViewportHeight) || intrinsicHeight;
       const labelAnchor = rotatePoint(-30, -17, position.width / 2, position.height / 2, position.rotation);
-      return <div key={item.instanceId} ref={(node) => { if (node) shellNodesRef.current.set(item.instanceId, node); else shellNodesRef.current.delete(item.instanceId); }} className="prototype-overlay-shell" style={{ left: 0, top: 0, width: position.width, height: position.height, transform: `translate3d(${position.x}px, ${position.y}px, 0)`, opacity: item.loadStatus === "loading" ? 0 : 1 }}>
+      return <div key={item.instanceId} ref={(node) => { if (node) shellNodesRef.current.set(item.instanceId, node); else shellNodesRef.current.delete(item.instanceId); }} className="prototype-overlay-shell" style={{ left: 0, top: 0, width: position.width, height: position.height, transform: `translate3d(${position.x}px, ${position.y}px, 0)`, opacity: item.loadStatus === "loading" && !hasReusableStoryBounds(item) ? 0 : 1 }}>
         <div ref={(node) => { if (node) frameNodesRef.current.set(item.instanceId, node); else frameNodesRef.current.delete(item.instanceId); }} className={`prototype-overlay-item${selectedId === item.instanceId ? " is-selected" : ""}`} style={{ width: position.width, height: position.height, transform: `rotate(${position.rotation}rad)` }} onPointerDown={(event) => begin(item, event, "move")} onPointerMove={move}>
           <div ref={(node) => { if (node) scalerNodesRef.current.set(item.instanceId, node); else scalerNodesRef.current.delete(item.instanceId); }} className="prototype-overlay-scaler" style={{ width: intrinsicWidth, height: intrinsicHeight, transform: `scale(${position.width / intrinsicWidth}, ${position.height / intrinsicHeight})` }}><iframe ref={(frameElement) => { if (frameElement) framesRef.current.set(item.instanceId, frameElement); else framesRef.current.delete(item.instanceId); }} title={item.storyName || item.storyId || item.name} tabIndex={-1} src={storyEmbedUrl(item.storyUrl)} scrolling="no" onLoad={() => measureStory(item)} onError={() => measureWithElectron(item)} style={{ width: frameWidth, height: frameHeight, transform: `translate(${-Number(item.contentOffsetX || 0)}px, ${-Number(item.contentOffsetY || 0)}px)` }} /></div>
           {item.boundsSource === "fallback" && <span className="prototype-overlay-fallback-size">{Math.round(position.width)} × {Math.round(position.height)}</span>}
