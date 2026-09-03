@@ -85,7 +85,7 @@ export function StorybookSidebar({
   const sketchPositionRaf = useRef<number | null>(null);
   const pendingSketchPosition = useRef<{ left: number; top: number } | null>(null);
   const [searchSourceIds, setSearchSourceIds] = useState<string[]>([]);
-  const [expandedSources, setExpandedSources] = useState<string[]>([]);
+  const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
   useEffect(() => {
     const request = window.dockyard?.storybookSources();
     if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
@@ -152,8 +152,7 @@ export function StorybookSidebar({
     return groupStoriesBySource(sources, searchSourceIds, visibleGroups);
   }, [sources, searchSourceIds, visibleGroups]);
   const toggleSource = (sourceId: string) => {
-    const isExpanded = expandedSources.includes(sourceId);
-    setExpandedSources((current) => isExpanded ? current.filter((id) => id !== sourceId) : [...current, sourceId]);
+    setExpandedSourceId((current) => current === sourceId ? null : sourceId);
   };
   const selectedStory = useMemo(() => (catalog?.stories || []).find((story) => story.id === selection?.storyId), [catalog, selection?.storyId]);
   const selectedSource = sources.find((source) => source.id === selection?.sourceId);
@@ -327,11 +326,11 @@ export function StorybookSidebar({
               <small className="storybook-status">{status}</small>
               <div className="storybook-groups">
                 <Accordion align="start" size="sm" className="storybook-source-accordion">
-                {sourceGroups.map(({ sourceId, sourceName, categories }) => <AccordionItem key={sourceId} className="storybook-group" open={expandedSources.includes(sourceId)} onHeadingClick={() => toggleSource(sourceId)} title={<span className="storybook-source-directory-title">{sourceName}<small>{categories.reduce((count, [, stories]) => count + stories.length, 0)}</small></span>}>
-                  {categories.map(([category, stories]) => <div key={category} className="storybook-category"><h3>{category}</h3>{stories.map((story) => <div key={story.id} className={`storybook-story${selection?.storyId === story.id ? " selected" : ""}`}>
+                {sourceGroups.map(({ sourceId, sourceName, categories }) => <AccordionItem key={sourceId} className="storybook-group" open={expandedSourceId === sourceId} onHeadingClick={() => toggleSource(sourceId)} title={<span className="storybook-source-directory-title">{sourceName}<small>{categories.reduce((count, [, stories]) => count + stories.length, 0)}</small></span>}>
+                  <div className="storybook-source-content" aria-label={`${sourceName} 故事列表`}>{categories.map(([category, stories]) => <div key={category} className="storybook-category"><h3>{category}</h3>{stories.map((story) => <div key={story.id} className={`storybook-story${selection?.storyId === story.id ? " selected" : ""}`}>
                     <button type="button" className="storybook-story-main" draggable onClick={() => onSelectionChange(story)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "copy"; event.dataTransfer.setData("application/x-dockyard-story", JSON.stringify(story)); onStoryDragStart?.(event, story); }}>{story.name}</button>
                     <IconButton label="添加到画板" size="sm" kind="ghost" onClick={() => onStoryAdd(story)}><Plus size={16} /></IconButton>
-                  </div>)}</div>)}
+                  </div>)}</div>)}</div>
                 </AccordionItem>)}</Accordion>
                 {!sourceGroups.length && <p className="storybook-empty">没有匹配的故事</p>}
               </div>
