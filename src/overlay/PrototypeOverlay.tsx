@@ -349,6 +349,21 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
 
   const stories = components.filter((item) => item.sourceType === "storybook" && item.storyUrl);
   if (!stories.length) return null;
+  const staticStories = stories.filter((item) => item.staticModule);
+  if (staticStories.length === 1) {
+    const item = staticStories[0];
+    const staticViewport = viewport.getSnapshot();
+    const position = positionsRef.current.get(item.instanceId) || toRuntimePosition(item);
+    const module = item.staticModule!;
+    const runtimeUrl = `${module.manifestUrl.replace(/manifest\.json$/, "runtime.html")}?component=${encodeURIComponent(module.componentKey)}`;
+    return <div ref={rootRef} className={`prototype-overlay-layer${altPressed && interactionEnabled ? " is-active" : ""}`} style={{ transform: `translate3d(${staticViewport.scrollX * staticViewport.zoom}px, ${staticViewport.scrollY * staticViewport.zoom}px, 0) scale(${staticViewport.zoom})` }}>
+      <div className="prototype-overlay-shell" style={{ left: 0, top: 0, width: position.width, height: position.height, transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}>
+        <div className="prototype-overlay-item" style={{ width: position.width, height: position.height }}>
+          <iframe title={item.name} src={runtimeUrl} style={{ width: position.width, height: position.height, border: 0, background: "transparent" }} />
+        </div>
+      </div>
+    </div>;
+  }
   const initialViewport = viewport.getSnapshot();
   return <div ref={rootRef} className={`prototype-overlay-layer${altPressed && interactionEnabled ? " is-active" : ""}`} style={{ transform: `translate3d(${initialViewport.scrollX * initialViewport.zoom}px, ${initialViewport.scrollY * initialViewport.zoom}px, 0) scale(${initialViewport.zoom})` }}>
     {stories.map((item) => {
