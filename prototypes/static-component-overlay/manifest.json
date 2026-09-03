@@ -1,0 +1,9 @@
+{
+  "name": "carbon-static-module",
+  "version": "0.1.0",
+  "entry": "./dist/carbon-static-module.js",
+  "styles": ["./dist/dockyard.css"],
+  "defaults": {
+    "components": ["carbon-button", "carbon-date-picker", "carbon-checkbox", "carbon-dropdown", "carbon-toggle"]
+  }
+}
