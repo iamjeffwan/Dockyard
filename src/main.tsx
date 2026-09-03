@@ -707,7 +707,7 @@ function AnnotatorView() {
       storyName: story.name,
       storyTitle: story.title,
       storyUrl: story.storyUrl,
-      boundsSource: "fallback",
+      loadStatus: "loading",
       x,
       y,
       width: 230,
