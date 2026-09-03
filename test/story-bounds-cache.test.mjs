@@ -13,6 +13,7 @@ const cached = {
   id: "button", sourceId: "carbon", storyId: "button--primary", storyUrl: "https://storybook.test/iframe.html?id=button--primary", version: "1",
   boundsSource: "story-dom", boundsCacheKey: "carbon::button--primary::https://storybook.test/iframe.html?id=button--primary::1",
   intrinsicWidth: 96, intrinsicHeight: 40, frameViewportWidth: 800, frameViewportHeight: 600,
+  naturalWidth: 96, naturalHeight: 40,
 };
 
 test("匹配身份的真实边界可复用", async () => {
@@ -24,4 +25,12 @@ test("身份变化或回退边界不可复用", async () => {
   const { hasReusableStoryBounds } = await loadModule();
   assert.equal(hasReusableStoryBounds({ ...cached, storyId: "button--secondary" }), false);
   assert.equal(hasReusableStoryBounds({ ...cached, boundsSource: "fallback" }), false);
+});
+
+test("用户调整当前尺寸不影响自然尺寸缓存", async () => {
+  const { hasReusableStoryBounds } = await loadModule();
+  const resized = { ...cached, width: 240, height: 100 };
+  assert.equal(hasReusableStoryBounds(resized), true);
+  assert.equal(resized.naturalWidth, 96);
+  assert.equal(resized.naturalHeight, 40);
 });
