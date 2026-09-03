@@ -11,7 +11,7 @@ export const OverlayEvent = Object.freeze({
   componentBounds: 'component-bounds',
 });
 
-export const HostCommand = Object.freeze({ measure: 'measure' });
+export const HostCommand = Object.freeze({ measure: 'measure', retry: 'retry' });
 
 export function createOverlayMessage(type, payload = {}) {
   return { protocol: 'dockyard-overlay', version: OVERLAY_PROTOCOL_VERSION, type, ...payload };
