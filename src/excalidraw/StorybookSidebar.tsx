@@ -67,6 +67,7 @@ export function StorybookSidebar({
   const [sources, setSources] = useState<StorybookSource[]>([]);
   const [sourceId, setSourceId] = useState(selection?.sourceId || "");
   const [catalog, setCatalog] = useState<StorybookCatalog | null>(null);
+  const [catalogs, setCatalogs] = useState<StorybookCatalog[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("正在读取来源…");
   const [sketchOpen, setSketchOpen] = useState(false);
@@ -77,6 +78,7 @@ export function StorybookSidebar({
   const [resizeHandleRect, setResizeHandleRect] = useState<{ left: number; top: number; height: number } | null>(null);
   const [sketchAnchorRect, setSketchAnchorRect] = useState<{ left: number; top: number; bottom: number; height: number } | null>(null);
   const sketchCardRef = useRef<HTMLDivElement | null>(null);
+  const catalogRequestId = useRef(0);
   const sketchPositionRaf = useRef<number | null>(null);
   const pendingSketchPosition = useRef<{ left: number; top: number } | null>(null);
   const [searchSourceIds, setSearchSourceIds] = useState<string[]>([]);
@@ -91,22 +93,47 @@ export function StorybookSidebar({
     }).catch(() => setStatus("来源读取失败"));
   }, [selection?.sourceId]);
   useEffect(() => {
-    if (!sourceId) { setCatalog(null); setStatus("请选择组件来源"); return; }
-    setStatus("正在读取组件目录…");
+    if (!sourceId) { setCatalog(null); return; }
     const request = window.dockyard?.storybookCatalog(sourceId);
-    if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
-    void request.then((next) => { setCatalog(next); setStatus(`${next.stories.length} 个故事`); }).catch(() => setStatus("目录读取失败"));
+    if (!request) return;
+    void request.then(setCatalog).catch(() => setCatalog(null));
   }, [sourceId]);
+  useEffect(() => {
+    const requestId = ++catalogRequestId.current;
+    if (!searchSourceIds.length) {
+      setCatalogs([]);
+      setStatus("请选择组件来源");
+      return;
+    }
+    const requests = searchSourceIds.map((id) => window.dockyard?.storybookCatalog(id));
+    if (requests.some((request) => !request)) {
+      setCatalogs([]);
+      setStatus("请在 Electron 中打开远程目录");
+      return;
+    }
+    setStatus("正在读取组件目录…");
+    void Promise.all(requests as Promise<StorybookCatalog>[])
+      .then((next) => {
+        if (requestId !== catalogRequestId.current) return;
+        setCatalogs(next);
+        setStatus(`${next.reduce((count, item) => count + item.stories.length, 0)} 个故事`);
+      })
+      .catch(() => {
+        if (requestId !== catalogRequestId.current) return;
+        setCatalogs([]);
+        setStatus("目录读取失败");
+      });
+  }, [searchSourceIds]);
   const groups = useMemo(() => {
     const map = new Map<string, StorybookStory[]>();
-    for (const story of catalog?.stories || []) {
+    for (const story of catalogs.flatMap((item) => item.stories)) {
       if (!story.title.toLowerCase().includes(query.toLowerCase()) && !story.name.toLowerCase().includes(query.toLowerCase())) continue;
       const stories = map.get(story.title) || [];
       stories.push(story);
       map.set(story.title, stories);
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [catalog, query]);
+  }, [catalogs, query]);
   const visibleGroups = useMemo(() => {
     if (!storybookResult) return groups;
     const selected = new Set(searchSourceIds.length ? searchSourceIds : sources.map((item) => item.id));
