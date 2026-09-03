@@ -79,6 +79,7 @@ export function ExcalidrawCanvas({
   const last = useRef(sceneContentSignature(scene));
   const nativeImageSources = useRef(new Map<string, SourceAsset>());
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
+  const centeredArtworkId = useRef<string | null>(null);
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
   const libraryReturnUrl = useMemo(() => excalidrawLibraryReturnUrl(), []);
@@ -93,6 +94,26 @@ export function ExcalidrawCanvas({
       }),
     );
   }, [scene, viewport]);
+
+  useEffect(() => {
+    if (!artwork) {
+      centeredArtworkId.current = null;
+      return;
+    }
+    if (!excalidrawAPI || centeredArtworkId.current === artwork.id) return;
+    const sourceElement = scene.elements.find(
+      (item) => item.customData?.dockyardType === "source",
+    );
+    if (!sourceElement) return;
+    centeredArtworkId.current = artwork.id;
+    requestAnimationFrame(() => {
+      excalidrawAPI.scrollToContent(sourceElement as any, {
+        fitToViewport: true,
+        viewportZoomFactor: 0.9,
+        animate: false,
+      });
+    });
+  }, [artwork, excalidrawAPI, scene]);
 
   useEffect(() => {
     const node = canvasWrapRef.current;
