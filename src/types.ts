@@ -135,6 +135,11 @@ export type ComponentInstance = Candidate & {
   sequence?: string;
   status: "confirmed";
   sourceType?: "image" | "storybook";
+  sourceLibraryId?: string;
+  componentKey?: string;
+  categoryPath?: string[];
+  variantKey?: string;
+  props?: Record<string, unknown>;
   staticModule?: { manifestUrl: string; componentKey: string; version?: string };
   boundsSource?: "image" | "story-dom" | "electron-web-frame-main" | "fallback";
   boundsCacheKey?: string;
