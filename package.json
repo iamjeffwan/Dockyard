@@ -2,6 +2,7 @@
   "name": "dockyard",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Dockyard design context workbench",
   "main": "dist-electron/electron/main.js",
   "scripts": {

@@ -8,10 +8,10 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  Accordion,
+  AccordionItem,
   Button,
-  DismissibleTag,
   IconButton,
-  MultiSelect,
   Search as CarbonSearch,
   Select,
   SelectItem,
@@ -25,10 +25,13 @@ import type {
   StorybookSource,
   StorybookStory,
   Workspace,
-} from "../types";
+} from "../types.js";
+import { StorybookSourceMultiSelect } from "./StorybookSourceMultiSelect.js";
+import { groupStoriesBySource } from "./storybook-source-groups.js";
+const recognitionPrompt = "这是一张不完整的 UI 开发草图。请根据轮廓、位置关系、文字区域和交互暗示推测组件类型。优先使用 shadcn/ui 或 Radix UI 等组件库中的标准组件名称。不要生成代码。";
 
 const LazySidebarShell = lazy(async () => {
-  const module = await import("../excalidraw-ui");
+  const module = await import("./ui.js");
   return { default: module.StorybookSidebarShell };
 });
 
@@ -67,18 +70,22 @@ export function StorybookSidebar({
   const [sources, setSources] = useState<StorybookSource[]>([]);
   const [sourceId, setSourceId] = useState(selection?.sourceId || "");
   const [catalog, setCatalog] = useState<StorybookCatalog | null>(null);
+  const [catalogs, setCatalogs] = useState<StorybookCatalog[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("正在读取来源…");
   const [sketchOpen, setSketchOpen] = useState(false);
   const [sketchDataUrl, setSketchDataUrl] = useState<string | null>(null);
   const [searchingSketch, setSearchingSketch] = useState(false);
+  const [recognition, setRecognition] = useState<{ components: string[]; rawText: string } | null>(null);
   const [storybookResult, setStorybookResult] = useState<StorybookSearchResult | null>(null);
   const [resizeHandleRect, setResizeHandleRect] = useState<{ left: number; top: number; height: number } | null>(null);
   const [sketchAnchorRect, setSketchAnchorRect] = useState<{ left: number; top: number; bottom: number; height: number } | null>(null);
   const sketchCardRef = useRef<HTMLDivElement | null>(null);
+  const catalogRequestId = useRef(0);
   const sketchPositionRaf = useRef<number | null>(null);
   const pendingSketchPosition = useRef<{ left: number; top: number } | null>(null);
   const [searchSourceIds, setSearchSourceIds] = useState<string[]>([]);
+  const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
   useEffect(() => {
     const request = window.dockyard?.storybookSources();
     if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
@@ -90,22 +97,47 @@ export function StorybookSidebar({
     }).catch(() => setStatus("来源读取失败"));
   }, [selection?.sourceId]);
   useEffect(() => {
-    if (!sourceId) { setCatalog(null); setStatus("请选择组件来源"); return; }
-    setStatus("正在读取组件目录…");
+    if (!sourceId) { setCatalog(null); return; }
     const request = window.dockyard?.storybookCatalog(sourceId);
-    if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
-    void request.then((next) => { setCatalog(next); setStatus(`${next.stories.length} 个故事`); }).catch(() => setStatus("目录读取失败"));
+    if (!request) return;
+    void request.then(setCatalog).catch(() => setCatalog(null));
   }, [sourceId]);
+  useEffect(() => {
+    const requestId = ++catalogRequestId.current;
+    if (!searchSourceIds.length) {
+      setCatalogs([]);
+      setStatus("请选择组件来源");
+      return;
+    }
+    const requests = searchSourceIds.map((id) => window.dockyard?.storybookCatalog(id));
+    if (requests.some((request) => !request)) {
+      setCatalogs([]);
+      setStatus("请在 Electron 中打开远程目录");
+      return;
+    }
+    setStatus("正在读取组件目录…");
+    void Promise.all(requests as Promise<StorybookCatalog>[])
+      .then((next) => {
+        if (requestId !== catalogRequestId.current) return;
+        setCatalogs(next);
+        setStatus(`${next.reduce((count, item) => count + item.stories.length, 0)} 个故事`);
+      })
+      .catch(() => {
+        if (requestId !== catalogRequestId.current) return;
+        setCatalogs([]);
+        setStatus("目录读取失败");
+      });
+  }, [searchSourceIds]);
   const groups = useMemo(() => {
     const map = new Map<string, StorybookStory[]>();
-    for (const story of catalog?.stories || []) {
+    for (const story of catalogs.flatMap((item) => item.stories)) {
       if (!story.title.toLowerCase().includes(query.toLowerCase()) && !story.name.toLowerCase().includes(query.toLowerCase())) continue;
       const stories = map.get(story.title) || [];
       stories.push(story);
       map.set(story.title, stories);
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [catalog, query]);
+  }, [catalogs, query]);
   const visibleGroups = useMemo(() => {
     if (!storybookResult) return groups;
     const selected = new Set(searchSourceIds.length ? searchSourceIds : sources.map((item) => item.id));
@@ -116,9 +148,14 @@ export function StorybookSidebar({
     }
     return [...map.entries()].map(([key, stories]) => [key.split("::").slice(1).join("::"), stories] as [string, StorybookStory[]]);
   }, [groups, searchSourceIds, sources, storybookResult]);
+  const sourceGroups = useMemo(() => {
+    return groupStoriesBySource(sources, searchSourceIds, visibleGroups);
+  }, [sources, searchSourceIds, visibleGroups]);
+  const toggleSource = (sourceId: string) => {
+    setExpandedSourceId((current) => current === sourceId ? null : sourceId);
+  };
   const selectedStory = useMemo(() => (catalog?.stories || []).find((story) => story.id === selection?.storyId), [catalog, selection?.storyId]);
   const selectedSource = sources.find((source) => source.id === selection?.sourceId);
-  const firstWord = (value: string) => value.trim().split(/\s+/)[0] || value;
   const selectedSearchSources = sources.filter((source) => searchSourceIds.includes(source.id));
   const captureSketch = async () => {
     if (!excalidrawAPI) return;
@@ -133,9 +170,8 @@ export function StorybookSidebar({
   const runSketchSearch = async () => {
     if (!sketchDataUrl || searchingSketch) return;
     setSearchingSketch(true);
-    setStorybookResult(null);
-    const result = await window.dockyard?.runStorybookSearch({ sketchDataUrl, sourceIds: searchSourceIds });
-    setStorybookResult(result || null);
+    const result = await window.dockyard?.recognizeSketch({ imageDataUrl: sketchDataUrl, prompt: recognitionPrompt });
+    setRecognition(result?.status === "success" ? { components: result.components, rawText: result.rawText } : null);
     setSearchingSketch(false);
   };
   useEffect(() => {
@@ -208,25 +244,8 @@ export function StorybookSidebar({
       <strong>涂鸦搜索</strong>
       <div className="storybook-sketch-preview">{sketchDataUrl ? <img src={sketchDataUrl} alt="当前草图选区" /> : "待从画稿获取选区"}</div>
       <div className="storybook-sketch-actions"><Button kind="secondary" size="sm" onClick={() => void captureSketch()}><span className="storybook-sketch-action-label">使用当前选区</span></Button><Button kind="tertiary" size="sm" onClick={() => setSketchDataUrl(null)}><span className="storybook-sketch-action-label">清除草图</span></Button></div>
-      <div className="storybook-multiselect-shell">
-        <MultiSelect
-          id="storybook-search-sources"
-          className="storybook-search-sources"
-          titleText="检索来源"
-          label={selectedSearchSources.length > 0 ? "" : "（可多选）"}
-          items={sources}
-          itemToString={(item) => firstWord(item?.name || "")}
-          selectedItems={selectedSearchSources}
-          onChange={({ selectedItems }) => setSearchSourceIds((selectedItems || []).map((source) => source.id))}
-        />
-        <div className="storybook-selected-source-tags">
-          {selectedSearchSources.map((source) => (
-            <DismissibleTag key={source.id} size="sm" type="high-contrast" text={firstWord(source.name)} title="移除来源" dismissTooltipLabel="移除来源" onClose={() => setSearchSourceIds((ids) => ids.filter((id) => id !== source.id))} />
-          ))}
-        </div>
-      </div>
-      <Button size="sm" disabled={!sketchDataUrl || searchingSketch} onClick={() => void runSketchSearch()}>{searchingSketch ? "正在检索…" : "开始检索"}</Button>
-      {storybookResult?.diagnostics?.map((item) => <small key={item} className="storybook-diagnostic">{item}</small>)}
+      <Button size="sm" disabled={!sketchDataUrl || searchingSketch} onClick={() => void runSketchSearch()}>{searchingSketch ? "正在识别…" : "识别草图"}</Button>
+      {recognition && <div className="storybook-recognition-result"><strong>候选组件</strong>{recognition.components.map((component) => <button key={component} type="button" onClick={() => setQuery(component)}>{component}</button>)}<strong>识别说明</strong><p>{recognition.rawText}</p></div>}
     </div>,
     document.body,
   );
@@ -300,24 +319,20 @@ export function StorybookSidebar({
                 </IconButton>
                 <CarbonSearch id="storybook-search" labelText="查找组件或故事" placeholder="查找组件或故事" value={query} onChange={(event) => setQuery(event.target.value)} size="sm" />
               </div>
-              <div className="storybook-source-control">
-                <Select id="storybook-source-filter" labelText="组件来源" value={sourceId} onChange={(event) => setSourceId(event.target.value)}>
-                  {sources.map((source) => <SelectItem key={source.id} value={source.id} text={source.name} />)}
-                </Select>
-              </div>
+              <StorybookSourceMultiSelect sources={sources} selectedSources={selectedSearchSources} onChange={setSearchSourceIds} />
               {storybookResult && <div className="storybook-search-mode">涂鸦匹配 <Button kind="ghost" size="sm" onClick={() => setStorybookResult(null)}>返回完整组件库</Button></div>}
             </div>
             <div className="storybook-list-section">
               <small className="storybook-status">{status}</small>
               <div className="storybook-groups">
-                {visibleGroups.map(([title, stories]) => <section key={title} className="storybook-group">
-                  <h3>{title}</h3>
-                  {stories.map((story) => <div key={story.id} className={`storybook-story${selection?.storyId === story.id ? " selected" : ""}`}>
+                <Accordion align="start" size="sm" className="storybook-source-accordion">
+                {sourceGroups.map(({ sourceId, sourceName, categories }) => <AccordionItem key={sourceId} className="storybook-group" open={expandedSourceId === sourceId} onHeadingClick={() => toggleSource(sourceId)} title={<span className="storybook-source-directory-title">{sourceName}<small>{categories.reduce((count, [, stories]) => count + stories.length, 0)}</small></span>}>
+                  <div className="storybook-source-content" aria-label={`${sourceName} 故事列表`}>{categories.map(([category, stories]) => <div key={category} className="storybook-category"><h3>{category}</h3>{stories.map((story) => <div key={story.id} className={`storybook-story${selection?.storyId === story.id ? " selected" : ""}`}>
                     <button type="button" className="storybook-story-main" draggable onClick={() => onSelectionChange(story)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "copy"; event.dataTransfer.setData("application/x-dockyard-story", JSON.stringify(story)); onStoryDragStart?.(event, story); }}>{story.name}</button>
                     <IconButton label="添加到画板" size="sm" kind="ghost" onClick={() => onStoryAdd(story)}><Plus size={16} /></IconButton>
-                  </div>)}
-                </section>)}
-                {!visibleGroups.length && <p className="storybook-empty">没有匹配的故事</p>}
+                  </div>)}</div>)}</div>
+                </AccordionItem>)}</Accordion>
+                {!sourceGroups.length && <p className="storybook-empty">没有匹配的故事</p>}
               </div>
             </div>
             <div className="storybook-preview">

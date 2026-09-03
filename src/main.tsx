@@ -10,9 +10,7 @@ import React, {
 import { createRoot } from "react-dom/client";
 import { MainMenu } from "@excalidraw/excalidraw";
 import {
-  Box,
   Check,
-  CircleAlert,
   FileCode2,
   FolderOpen,
   ImagePlus,
@@ -22,17 +20,13 @@ import {
   Save,
   Search,
   ShieldCheck,
-  Trash2,
-  WandSparkles,
   X,
 } from "lucide-react";
 import type {
   Artwork,
   BaseArtwork,
-  CacheStatus,
   Candidate,
   ComponentInstance,
-  GlobalComponent,
   SceneData,
   SourceAsset,
   Workspace,
@@ -46,11 +40,10 @@ import {
   readImage,
 } from "./canvas";
 import {
-  ComponentInventory,
   PrototypeOverlay,
-  StorybookSidebar,
   createViewportChannel,
 } from "./overlay";
+import { ComponentInventory, StorybookSidebar } from "./excalidraw/index.js";
 import { createDeliveryModule } from "./delivery/module";
 import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
 import { useWorkspace } from "./workspace/useWorkspace";
@@ -67,7 +60,7 @@ const LazyExcalidraw = lazy(async () => {
   return { default: module.Excalidraw };
 });
 const LazySidebarTrigger = lazy(async () => {
-  const module = await import("./excalidraw-ui");
+  const module = await import("./excalidraw/ui.js");
   return { default: module.StorybookSidebarTrigger };
 });
 
@@ -187,7 +180,7 @@ function useProjectStatus() {
   return { status, refresh };
 }
 function openPanel(
-  view: "annotator" | "component-search" | "tokens" | "decisions",
+  view: "annotator" | "tokens" | "decisions",
 ) {
   void window.dockyard?.openPanel(view);
 }
@@ -350,14 +343,6 @@ function BarView() {
       >
         <Pencil size={17} />
         <span>图稿</span>
-      </button>
-      <button
-        className="bar-context"
-        disabled={!projectStatus.current}
-        onClick={() => openPanel("component-search")}
-      >
-        <Box size={17} />
-        <span>组件</span>
       </button>
       <button className="bar-context" disabled={!projectStatus.current} onClick={() => openPanel("tokens")}>
         <Palette size={17} />
@@ -722,7 +707,7 @@ function AnnotatorView() {
       storyName: story.name,
       storyTitle: story.title,
       storyUrl: story.storyUrl,
-      boundsSource: "fallback",
+      loadStatus: "loading",
       x,
       y,
       width: 230,
@@ -959,287 +944,6 @@ function AnnotatorView() {
     </div>
   );
 }
-function ComponentSearchView() {
-  const { workspace, update } = useWorkspace();
-  const artwork = activeArtwork(workspace);
-  const [instruction, setInstruction] = useState(
-    "根据手绘组件草图，寻找最接近的真实组件",
-  );
-  const [searching, setSearching] = useState(false);
-  const [status, setStatus] = useState("等待组件草图");
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [diagnostics, setDiagnostics] = useState<string[]>([]);
-  const [cache, setCache] = useState<CacheStatus | null>(null);
-  useEffect(() => {
-    void window.dockyard
-      ?.componentCacheStatus()
-      .then((value) => setCache(value || null));
-  }, []);
-  useEffect(
-    () =>
-      window.dockyard?.onCodexTrace((trace) => {
-        setDiagnostics((current) => [...current, trace.message]);
-        if (trace.stage === "starting" || trace.stage === "failed")
-          setStatus(trace.message);
-      }),
-    [],
-  );
-  const runSearch = async () => {
-    if (!artwork) return;
-    const canvas = document.querySelector(
-      ".sketch-box canvas",
-    ) as HTMLCanvasElement | null;
-    if (!canvas) return;
-    setSearching(true);
-    setDiagnostics([]);
-    setStatus("正在理解草图、查找官方组件并生成预览…");
-    const result = await window.dockyard?.runCodexSearch({
-      instruction,
-      sketchDataUrl: canvas.toDataURL("image/png"),
-    });
-    setCandidates(result?.candidates || []);
-    setDiagnostics((current) => [
-      ...current,
-      ...(result?.diagnostics || []).filter((item) => !current.includes(item)),
-    ]);
-    setStatus(
-      result?.source === "cache"
-        ? "已使用 14 天候选缓存"
-        : result?.error || `${result?.candidates.length || 0} 个真实预览已就绪`,
-    );
-    setSearching(false);
-    void window.dockyard
-      ?.componentCacheStatus()
-      .then((value) => setCache(value || null));
-  };
-  const addGlobal = (candidate: Candidate) => {
-    if (!candidate.previewDataUrl) return;
-    const global: GlobalComponent = {
-      ...candidate,
-      globalId: uid("global-component"),
-      createdAt: now(),
-    };
-    update((current) => ({
-      ...current,
-      globalComponents: [...current.globalComponents, global],
-    }));
-  };
-  const addToArtwork = (candidate: Candidate) => {
-    if (!artwork || !candidate.previewDataUrl) return;
-    const elementId = uid("component-element");
-    const instance: ComponentInstance = {
-      ...candidate,
-      instanceId: uid("component"),
-      elementId,
-      status: "confirmed",
-    };
-    const element = createImageElement({
-      x: 120,
-      y: 120,
-      width: 320,
-      height: 180,
-      fileId: elementId,
-      customData: {
-        dockyardType: "component",
-        componentId: instance.instanceId,
-        source: candidate.docsUrl,
-        previewKind: candidate.previewKind,
-      },
-    });
-    update((current) => ({
-      ...current,
-      artworks: current.artworks.map((item) =>
-        item.id === artwork.id
-          ? {
-              ...item,
-              components: [...item.components, instance],
-              scene: {
-                ...item.scene,
-                elements: [...item.scene.elements, element],
-                files: {
-                  ...(item.scene.files || {}),
-                  [elementId]: {
-                    id: elementId,
-                    mimeType: "image/png",
-                    dataURL: candidate.previewDataUrl,
-                    created: Date.now(),
-                  },
-                },
-              },
-            }
-          : item,
-      ),
-    }));
-    openPanel("annotator");
-  };
-  return (
-    <div className="panel-shell compact-panel">
-      <WindowHeader
-        title="组件检索"
-        eyebrow="COMPONENT SCOUT / REAL PREVIEW"
-        onClose={() => void window.dockyard?.closePanel("component-search")}
-      />
-      <main className="search-page">
-        <div className="search-grid">
-          <section>
-            <div className="search-intro">
-              <span className="eyebrow">ONLY HAND-DRAWN SKETCH</span>
-              <h2>从草图找到真实组件</h2>
-              <p>候选由官方来源安装并实际渲染；没有可用预览的条目不会显示。</p>
-            </div>
-            {!artwork && (
-              <div className="search-status" role="status">
-                <CircleAlert size={16} />
-                先选择一张图稿
-              </div>
-            )}
-            <div className="sketch-box">
-              <Suspense fallback={<div className="excalidraw-loading" role="status">正在加载画布…</div>}>
-              <LazyExcalidraw
-                initialData={emptyScene() as any}
-                langCode="zh-CN"
-                theme="light"
-                UIOptions={{
-                  canvasActions: {
-                    changeViewBackgroundColor: true,
-                    loadScene: false,
-                    saveToActiveFile: false,
-                    export: false,
-                  },
-                }}
-              />
-              </Suspense>
-            </div>
-            <label className="field-label" htmlFor="component-instruction">
-              检索说明
-            </label>
-            <textarea
-              id="component-instruction"
-              value={instruction}
-              onChange={(event) => setInstruction(event.target.value)}
-              disabled={!artwork}
-            />
-            <button
-              className="search-btn"
-              onClick={runSearch}
-              disabled={searching || !artwork}
-              aria-busy={searching}
-            >
-              <WandSparkles size={17} />
-              {searching ? "正在生成真实预览…" : "检索 shadcn/ui"}
-            </button>
-            <div className="cache-status">
-              <span>
-                缓存：{cache?.candidateCount || 0} 项 ·{" "}
-                {Math.round((cache?.bytes || 0) / 1024 / 1024)} MB · 14 天
-              </span>
-              <button
-                className="cache-clear"
-                onClick={async () =>
-                  setCache(
-                    (await window.dockyard?.clearComponentCache()) || null,
-                  )
-                }
-              >
-                <Trash2 size={14} />
-                清理
-              </button>
-              <button
-                className="cache-clear"
-                onClick={() => void window.dockyard?.openCodexLogs()}
-              >
-                查看调用记录
-              </button>
-              <button
-                className="cache-clear"
-                onClick={() => void window.dockyard?.openAppLogs()}
-              >
-                查看应用日志
-              </button>
-            </div>
-          </section>
-          <section aria-live="polite">
-            <div className="search-status">{status}</div>
-            {!!diagnostics.length && (
-              <ol className="search-trace" aria-label="组件检索调用记录">
-                {diagnostics.map((item, index) => (
-                  <li key={`${index}-${item}`}>{item}</li>
-                ))}
-              </ol>
-            )}
-            <div className="candidate-list">
-              {candidates.map((candidate) => (
-                <article
-                  className="candidate-card"
-                  key={candidate.id}
-                  draggable={Boolean(candidate.previewDataUrl)}
-                  onDragStart={(event) =>
-                    event.dataTransfer.setData(
-                      "application/x-dockyard-candidate",
-                      JSON.stringify(candidate),
-                    )
-                  }
-                >
-                  <div className="candidate-thumb">
-                    <img
-                      src={candidate.previewDataUrl}
-                      alt={`${candidate.name} 的实际渲染预览`}
-                    />
-                  </div>
-                  <div className="candidate-body">
-                    <div className="candidate-info">
-                      <strong>{candidate.name}</strong>
-                      <small>
-                        {candidate.registryItem || candidate.library} ·{" "}
-                        {candidate.cacheHit ? "缓存" : "刚刚渲染"}
-                      </small>
-                      <p>{candidate.description || "官方组件候选"}</p>
-                      <div className="candidate-links">
-                        <a
-                          href={candidate.docsUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          官方文档
-                        </a>
-                        <a
-                          href={candidate.codeUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          源码
-                        </a>
-                      </div>
-                    </div>
-                    <div className="candidate-actions">
-                      <button onClick={() => addGlobal(candidate)}>
-                        加入全局组件
-                      </button>
-                      <button
-                        className="candidate-add"
-                        onClick={() => addToArtwork(candidate)}
-                        disabled={!artwork || !candidate.previewDataUrl}
-                      >
-                        <Plus size={15} />
-                        加入画稿
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-              {!candidates.length && (
-                <div className="canvas-empty-state">
-                  <Search size={25} />
-                  <p>真实候选会显示在这里</p>
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-      </main>
-    </div>
-  );
-}
 function TokensView() {
   const groups = useMemo(
     () =>
@@ -1316,14 +1020,11 @@ function App() {
   document.title =
     view === "annotator"
       ? "画板"
-      : view === "component-search"
-        ? "组件检索"
-        : view === "tokens"
+      : view === "tokens"
           ? "设计令牌"
           : view === "decisions"
             ? "设计决策"
             : "Dockyard";
-  if (view === "component-search") return <ComponentSearchView />;
   if (view === "tokens") return <TokensView />;
   if (view === "decisions") return <DecisionsView />;
   return view === "bar" ? <BarView /> : <AnnotatorView />;

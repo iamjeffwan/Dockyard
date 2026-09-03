@@ -1,25 +1,24 @@
-import { contextBridge, ipcRenderer } from "electron";
+import electron from "electron";
+
+const { contextBridge, ipcRenderer } = electron;
 
 contextBridge.exposeInMainWorld("dockyard", {
   saveWorkspace: (workspace: unknown) =>
     ipcRenderer.invoke("workspace:save", workspace),
   loadWorkspace: () => ipcRenderer.invoke("workspace:load"),
-  runCodexSearch: (payload: unknown) =>
-    ipcRenderer.invoke("codex:search", payload),
   runStorybookSearch: (payload: unknown) =>
     ipcRenderer.invoke("codex:storybook-search", payload),
+  recognizeSketch: (payload: { imageDataUrl: string; prompt: string }) =>
+    ipcRenderer.invoke("model:recognize", payload),
   onCodexTrace: (listener: (trace: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, trace: unknown) =>
       listener(trace);
     ipcRenderer.on("codex:trace", handler);
     return () => ipcRenderer.removeListener("codex:trace", handler);
   },
-  openCodexLogs: () => ipcRenderer.invoke("codex:logs-open"),
   openAppLogs: () => ipcRenderer.invoke("diagnostics:logs-open"),
   writeLog: (level: "debug" | "info" | "warn" | "error", event: string, context?: Record<string, unknown>) =>
     ipcRenderer.send("diagnostics:log", { level, event, context }),
-  componentCacheStatus: () => ipcRenderer.invoke("component-cache:status"),
-  clearComponentCache: () => ipcRenderer.invoke("component-cache:clear"),
   completeArtwork: (payload: unknown) =>
     ipcRenderer.invoke("artwork:complete", payload),
   pickProject: () => ipcRenderer.invoke("project:pick"),
@@ -40,10 +39,10 @@ contextBridge.exposeInMainWorld("dockyard", {
     ipcRenderer.invoke("storybook:measure-frame", storyUrl),
   captureViewport: () => ipcRenderer.invoke("artwork:capture-viewport"),
   openPanel: (
-    view: "annotator" | "component-search" | "tokens" | "decisions",
+    view: "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test",
   ) => ipcRenderer.invoke("panel:open", view),
   closePanel: (
-    view: "annotator" | "component-search" | "tokens" | "decisions",
+    view: "annotator" | "component-search" | "tokens" | "decisions" | "model-ab-test",
   ) => ipcRenderer.invoke("panel:close", view),
   showBar: () => ipcRenderer.invoke("bar:show"),
   hideBar: () => ipcRenderer.invoke("bar:hide"),
