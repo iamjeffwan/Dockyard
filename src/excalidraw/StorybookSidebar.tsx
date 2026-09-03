@@ -8,13 +8,15 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  Accordion,
+  AccordionItem,
   Button,
   IconButton,
   Search as CarbonSearch,
   Select,
   SelectItem,
 } from "@carbon/react";
-import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import scribbleLoopIcon from "../assets/scribble-loop.svg";
 import type {
@@ -25,6 +27,7 @@ import type {
   Workspace,
 } from "../types.js";
 import { StorybookSourceMultiSelect } from "./StorybookSourceMultiSelect.js";
+import { groupStoriesBySource } from "./storybook-source-groups.js";
 const recognitionPrompt = "这是一张不完整的 UI 开发草图。请根据轮廓、位置关系、文字区域和交互暗示推测组件类型。优先使用 shadcn/ui 或 Radix UI 等组件库中的标准组件名称。不要生成代码。";
 
 const LazySidebarShell = lazy(async () => {
@@ -83,8 +86,6 @@ export function StorybookSidebar({
   const pendingSketchPosition = useRef<{ left: number; top: number } | null>(null);
   const [searchSourceIds, setSearchSourceIds] = useState<string[]>([]);
   const [expandedSources, setExpandedSources] = useState<string[]>([]);
-  const [sourceOrder, setSourceOrder] = useState<string[]>([]);
-  const [movingSource, setMovingSource] = useState<string | null>(null);
   useEffect(() => {
     const request = window.dockyard?.storybookSources();
     if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
@@ -93,7 +94,6 @@ export function StorybookSidebar({
       const next = selection?.sourceId || items?.[0]?.id || "";
       setSourceId(next);
       setSearchSourceIds((current) => current.length ? current : (items || []).map((item) => item.id));
-      setSourceOrder((current) => current.length ? current : (items || []).map((item) => item.id));
     }).catch(() => setStatus("来源读取失败"));
   }, [selection?.sourceId]);
   useEffect(() => {
@@ -149,28 +149,11 @@ export function StorybookSidebar({
     return [...map.entries()].map(([key, stories]) => [key.split("::").slice(1).join("::"), stories] as [string, StorybookStory[]]);
   }, [groups, searchSourceIds, sources, storybookResult]);
   const sourceGroups = useMemo(() => {
-    const groupMap = new Map<string, [string, StorybookStory[]]>();
-    for (const [title, stories] of visibleGroups) {
-      const sourceId = stories[0]?.sourceId;
-      if (!sourceId) continue;
-      const existing = groupMap.get(sourceId);
-      if (existing) existing[1].push(...stories);
-      else groupMap.set(sourceId, [sourceId, [...stories]]);
-    }
-    return sourceOrder
-      .map((id) => groupMap.get(id))
-      .filter((group): group is [string, StorybookStory[]] => Boolean(group));
-  }, [sourceOrder, visibleGroups]);
+    return groupStoriesBySource(sources, searchSourceIds, visibleGroups);
+  }, [sources, searchSourceIds, visibleGroups]);
   const toggleSource = (sourceId: string) => {
     const isExpanded = expandedSources.includes(sourceId);
-    setExpandedSources((current) => isExpanded ? current.filter((id) => id !== sourceId) : [...current.filter((id) => id !== sourceId), sourceId]);
-    if (isExpanded) return;
-    setSourceOrder((current) => {
-      if (current[current.length - 1] === sourceId) return current;
-      return [...current.filter((id) => id !== sourceId), sourceId];
-    });
-    setMovingSource(sourceId);
-    window.setTimeout(() => setMovingSource((current) => current === sourceId ? null : current), 180);
+    setExpandedSources((current) => isExpanded ? current.filter((id) => id !== sourceId) : [...current, sourceId]);
   };
   const selectedStory = useMemo(() => (catalog?.stories || []).find((story) => story.id === selection?.storyId), [catalog, selection?.storyId]);
   const selectedSource = sources.find((source) => source.id === selection?.sourceId);
@@ -343,17 +326,13 @@ export function StorybookSidebar({
             <div className="storybook-list-section">
               <small className="storybook-status">{status}</small>
               <div className="storybook-groups">
-                {sourceGroups.map(([sourceId, stories]) => <section key={sourceId} className={`storybook-group${expandedSources.includes(sourceId) ? " is-expanded" : ""}${movingSource === sourceId ? " is-moving" : ""}`}>
-                  <button type="button" className="storybook-source-directory" onClick={() => toggleSource(sourceId)} aria-expanded={expandedSources.includes(sourceId)}>
-                    {expandedSources.includes(sourceId) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                    <span>{sources.find((source) => source.id === sourceId)?.name || sourceId}</span>
-                    <small>{stories.length}</small>
-                  </button>
-                  {expandedSources.includes(sourceId) && stories.map((story) => <div key={story.id} className={`storybook-story${selection?.storyId === story.id ? " selected" : ""}`}>
+                <Accordion align="start" size="sm" className="storybook-source-accordion">
+                {sourceGroups.map(({ sourceId, sourceName, categories }) => <AccordionItem key={sourceId} className="storybook-group" open={expandedSources.includes(sourceId)} onHeadingClick={() => toggleSource(sourceId)} title={<span className="storybook-source-directory-title">{sourceName}<small>{categories.reduce((count, [, stories]) => count + stories.length, 0)}</small></span>}>
+                  {categories.map(([category, stories]) => <div key={category} className="storybook-category"><h3>{category}</h3>{stories.map((story) => <div key={story.id} className={`storybook-story${selection?.storyId === story.id ? " selected" : ""}`}>
                     <button type="button" className="storybook-story-main" draggable onClick={() => onSelectionChange(story)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "copy"; event.dataTransfer.setData("application/x-dockyard-story", JSON.stringify(story)); onStoryDragStart?.(event, story); }}>{story.name}</button>
                     <IconButton label="添加到画板" size="sm" kind="ghost" onClick={() => onStoryAdd(story)}><Plus size={16} /></IconButton>
-                  </div>)}
-                </section>)}
+                  </div>)}</div>)}
+                </AccordionItem>)}</Accordion>
                 {!sourceGroups.length && <p className="storybook-empty">没有匹配的故事</p>}
               </div>
             </div>
