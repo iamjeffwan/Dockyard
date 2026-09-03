@@ -14,7 +14,7 @@ import {
   Select,
   SelectItem,
 } from "@carbon/react";
-import { Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import scribbleLoopIcon from "../assets/scribble-loop.svg";
 import type {
@@ -82,6 +82,9 @@ export function StorybookSidebar({
   const sketchPositionRaf = useRef<number | null>(null);
   const pendingSketchPosition = useRef<{ left: number; top: number } | null>(null);
   const [searchSourceIds, setSearchSourceIds] = useState<string[]>([]);
+  const [expandedSources, setExpandedSources] = useState<string[]>([]);
+  const [sourceOrder, setSourceOrder] = useState<string[]>([]);
+  const [movingSource, setMovingSource] = useState<string | null>(null);
   useEffect(() => {
     const request = window.dockyard?.storybookSources();
     if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
@@ -90,6 +93,7 @@ export function StorybookSidebar({
       const next = selection?.sourceId || items?.[0]?.id || "";
       setSourceId(next);
       setSearchSourceIds((current) => current.length ? current : (items || []).map((item) => item.id));
+      setSourceOrder((current) => current.length ? current : (items || []).map((item) => item.id));
     }).catch(() => setStatus("来源读取失败"));
   }, [selection?.sourceId]);
   useEffect(() => {
@@ -144,6 +148,30 @@ export function StorybookSidebar({
     }
     return [...map.entries()].map(([key, stories]) => [key.split("::").slice(1).join("::"), stories] as [string, StorybookStory[]]);
   }, [groups, searchSourceIds, sources, storybookResult]);
+  const sourceGroups = useMemo(() => {
+    const groupMap = new Map<string, [string, StorybookStory[]]>();
+    for (const [title, stories] of visibleGroups) {
+      const sourceId = stories[0]?.sourceId;
+      if (!sourceId) continue;
+      const existing = groupMap.get(sourceId);
+      if (existing) existing[1].push(...stories);
+      else groupMap.set(sourceId, [sourceId, [...stories]]);
+    }
+    return sourceOrder
+      .map((id) => groupMap.get(id))
+      .filter((group): group is [string, StorybookStory[]] => Boolean(group));
+  }, [sourceOrder, visibleGroups]);
+  const toggleSource = (sourceId: string) => {
+    const isExpanded = expandedSources.includes(sourceId);
+    setExpandedSources((current) => isExpanded ? current.filter((id) => id !== sourceId) : [...current.filter((id) => id !== sourceId), sourceId]);
+    if (isExpanded) return;
+    setSourceOrder((current) => {
+      if (current[current.length - 1] === sourceId) return current;
+      return [...current.filter((id) => id !== sourceId), sourceId];
+    });
+    setMovingSource(sourceId);
+    window.setTimeout(() => setMovingSource((current) => current === sourceId ? null : current), 180);
+  };
   const selectedStory = useMemo(() => (catalog?.stories || []).find((story) => story.id === selection?.storyId), [catalog, selection?.storyId]);
   const selectedSource = sources.find((source) => source.id === selection?.sourceId);
   const selectedSearchSources = sources.filter((source) => searchSourceIds.includes(source.id));
@@ -315,14 +343,18 @@ export function StorybookSidebar({
             <div className="storybook-list-section">
               <small className="storybook-status">{status}</small>
               <div className="storybook-groups">
-                {visibleGroups.map(([title, stories]) => <section key={title} className="storybook-group">
-                  <h3>{title}</h3>
-                  {stories.map((story) => <div key={story.id} className={`storybook-story${selection?.storyId === story.id ? " selected" : ""}`}>
+                {sourceGroups.map(([sourceId, stories]) => <section key={sourceId} className={`storybook-group${expandedSources.includes(sourceId) ? " is-expanded" : ""}${movingSource === sourceId ? " is-moving" : ""}`}>
+                  <button type="button" className="storybook-source-directory" onClick={() => toggleSource(sourceId)} aria-expanded={expandedSources.includes(sourceId)}>
+                    {expandedSources.includes(sourceId) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    <span>{sources.find((source) => source.id === sourceId)?.name || sourceId}</span>
+                    <small>{stories.length}</small>
+                  </button>
+                  {expandedSources.includes(sourceId) && stories.map((story) => <div key={story.id} className={`storybook-story${selection?.storyId === story.id ? " selected" : ""}`}>
                     <button type="button" className="storybook-story-main" draggable onClick={() => onSelectionChange(story)} onDragStart={(event) => { event.dataTransfer.effectAllowed = "copy"; event.dataTransfer.setData("application/x-dockyard-story", JSON.stringify(story)); onStoryDragStart?.(event, story); }}>{story.name}</button>
                     <IconButton label="添加到画板" size="sm" kind="ghost" onClick={() => onStoryAdd(story)}><Plus size={16} /></IconButton>
                   </div>)}
                 </section>)}
-                {!visibleGroups.length && <p className="storybook-empty">没有匹配的故事</p>}
+                {!sourceGroups.length && <p className="storybook-empty">没有匹配的故事</p>}
               </div>
             </div>
             <div className="storybook-preview">
