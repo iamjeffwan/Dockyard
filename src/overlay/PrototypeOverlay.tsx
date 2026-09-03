@@ -350,16 +350,17 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
   const stories = components.filter((item) => item.sourceType === "storybook" && item.storyUrl);
   if (!stories.length) return null;
   const staticStories = stories.filter((item) => item.staticModule);
-  if (staticStories.length === 1) {
+  if (staticStories.length > 0) {
     const item = staticStories[0];
     const staticViewport = viewport.getSnapshot();
     const position = positionsRef.current.get(item.instanceId) || toRuntimePosition(item);
     const module = item.staticModule!;
-    const runtimeUrl = `${module.manifestUrl.replace(/manifest\.json$/, "runtime.html")}?component=${encodeURIComponent(module.componentKey)}`;
+    const instances = staticStories.map((candidate) => ({ id: candidate.instanceId, componentKey: candidate.staticModule?.componentKey, x: positionsRef.current.get(candidate.instanceId)?.x || 0, y: positionsRef.current.get(candidate.instanceId)?.y || 0 }));
+    const runtimeUrl = `${module.manifestUrl.replace(/manifest\.json$/, "runtime.html")}?instances=${encodeURIComponent(JSON.stringify(instances))}`;
     return <div ref={rootRef} className={`prototype-overlay-layer${altPressed && interactionEnabled ? " is-active" : ""}`} style={{ transform: `translate3d(${staticViewport.scrollX * staticViewport.zoom}px, ${staticViewport.scrollY * staticViewport.zoom}px, 0) scale(${staticViewport.zoom})` }}>
-      <div className="prototype-overlay-shell" style={{ left: 0, top: 0, width: position.width, height: position.height, transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}>
-        <div className="prototype-overlay-item" style={{ width: position.width, height: position.height }}>
-          <iframe title={item.name} src={runtimeUrl} style={{ width: position.width, height: position.height, border: 0, background: "transparent" }} />
+      <div className="prototype-overlay-shell" style={{ left: 0, top: 0, width: staticViewport.width / staticViewport.zoom, height: staticViewport.height / staticViewport.zoom, transform: "translate3d(0, 0, 0)" }}>
+        <div className="prototype-overlay-item" style={{ width: "100%", height: "100%" }}>
+          <iframe title="Shared static component Overlay" src={runtimeUrl} style={{ width: "100%", height: "100%", border: 0, background: "transparent" }} />
         </div>
       </div>
     </div>;
