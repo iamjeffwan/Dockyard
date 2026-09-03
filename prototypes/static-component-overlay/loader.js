@@ -1,4 +1,6 @@
-const send = (type, details = {}) => parent.postMessage({ type, ...details }, '*');
+import { postOverlayMessage } from './protocol.js';
+
+const send = (type, details = {}) => postOverlayMessage(type, details);
 
 export async function loadStaticComponentModule(baseUrl = '.') {
   send('module-loading');

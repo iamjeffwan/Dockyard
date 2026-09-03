@@ -2,11 +2,10 @@ import React, { useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Button, DatePicker, DatePickerInput } from '@carbon/react';
 import '../../src/carbon.scss';
+import { HostCommand, OverlayEvent, postOverlayMessage, rectOf } from './protocol.js';
 
-type Rect = { x: number; y: number; width: number; height: number };
 const post = (type: string, element: HTMLElement, extra: Record<string, unknown> = {}) => {
-  const r = element.getBoundingClientRect();
-  window.parent.postMessage({ type, rect: { x: r.x, y: r.y, width: r.width, height: r.height } satisfies Rect, ...extra }, '*');
+  postOverlayMessage(type, { componentId: extra.component ?? 'unknown', rect: rectOf(element), ...extra });
 };
 
 function Demo() {
@@ -31,4 +30,11 @@ function DragSurface({ component, children }: { component: string; children: Rea
 }
 
 createRoot(document.getElementById('root')!).render(<Demo />);
-window.parent.postMessage({ type: 'module-ready', module: 'carbon-static-module' }, '*');
+postOverlayMessage(OverlayEvent.moduleReady, { module: 'carbon-static-module', version: '0.1.0' });
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent || event.data?.protocol !== 'dockyard-overlay' || event.data.type !== HostCommand.measure) return;
+  for (const [selector, component] of [['button', 'carbon-button'], ['.bx--date-picker', 'carbon-date-picker']] as const) {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (element) post(OverlayEvent.componentBounds, element, { component });
+  }
+});

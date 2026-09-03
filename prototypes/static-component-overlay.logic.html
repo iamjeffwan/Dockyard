@@ -50,7 +50,7 @@
     function load() { loadCount++; if (location.protocol === 'http:' || location.protocol === 'https:') overlay.src = 'static-component-overlay/runtime.html'; else overlay.srcdoc = staticModule; state.textContent = `加载次数：${loadCount}\n等待组件消息…`; }
     addEventListener('message', e => { if (e.source !== overlay.contentWindow) return; if (e.data?.type === 'module-loading') { state.textContent = '静态模块加载中…\n正在读取 manifest.json（模块清单）和资源。'; return; } if (e.data?.type === 'module-error') { state.textContent = `静态模块加载失败\n阶段：${e.data.phase}\n模块：${e.data.module}\n版本：${e.data.version ?? '未知'}\n错误：${e.data.error}`; return; } if (e.data?.type === 'module-ready') { state.textContent = `静态模块已加载：${e.data.module} v${e.data.version}\n默认组件：${e.data.defaults?.components?.join(', ') ?? '—'}\n说明：依赖已在构建阶段打包，当前运行时直接执行模块。`; return; } if (!e.data?.rect) return; const {type, component, clicks, date, rect} = e.data; state.textContent = `事件：${type}\n组件：${component}\n点击次数：${clicks}\n选择日期：${date ?? '—'}\n组件实际可见边界：x=${rect.x.toFixed(1)}, y=${rect.y.toFixed(1)}, width=${rect.width.toFixed(1)}, height=${rect.height.toFixed(1)}\n说明：测量对象是组件 DOM，不是 iframe 视口。`; });
     document.querySelector('#reload').onclick = load;
-    document.querySelector('#measure').onclick = () => overlay.contentWindow?.postMessage({type:'measure'}, '*');
+    document.querySelector('#measure').onclick = () => overlay.contentWindow?.postMessage({protocol:'dockyard-overlay', version:'1', type:'measure'}, '*');
     load();
   </script>
 </body>
