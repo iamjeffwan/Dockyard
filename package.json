@@ -19,7 +19,8 @@
     "verify:project-picker": "node scripts/verify-project-picker.mjs",
     "verify:library-host": "node scripts/verify-library-host.mjs",
     "prototype:overlay:electron": "electron prototypes/excalidraw-component-overlay/electron-main.cjs",
-    "build": "pnpm run generate:tokens && tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
+    "build:static-components": "vite build --config prototypes/static-component-overlay/vite.config.mjs",
+    "build": "pnpm run build:static-components && pnpm run generate:tokens && tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
     "typecheck": "pnpm run generate:tokens && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "start": "electron . --dockyard-prod --disable-gpu --disable-gpu-compositing --no-sandbox"
   },

@@ -70,6 +70,7 @@ function excalidrawCanvasBackgroundPicksForDev() {
 export default defineConfig({
   plugins: [excalidrawCanvasBackgroundPicks(), react()],
   base: './',
+  publicDir: 'prototypes',
   build: {
     // Excalidraw's published lazy chunks are pre-bundled at ~1.8 MB;
     // keep the warning focused on entry/regular chunks instead of these

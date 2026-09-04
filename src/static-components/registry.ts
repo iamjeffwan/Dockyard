@@ -28,7 +28,7 @@ export type StaticComponentSelection = {
 };
 
 export const STATIC_SOURCES: StaticSourceDefinition[] = [
-  { id: "carbon-react", name: "Carbon React", manifestUrl: "/prototypes/static-component-overlay/manifest.json", version: "0.1.0" },
+  { id: "carbon-react", name: "Carbon React", manifestUrl: "/static-component-overlay/manifest.json", version: "0.1.0" },
 ];
 
 export const STATIC_COMPONENTS: StaticComponentDefinition[] = [
