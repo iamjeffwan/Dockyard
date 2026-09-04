@@ -4,6 +4,13 @@ import { Button, Checkbox, DatePicker, DatePickerInput, Dropdown, Toggle } from 
 import '../../src/carbon.scss';
 import './module-runtime.css';
 import { HostCommand, OverlayEvent, postOverlayMessage, rectOf } from './protocol.js';
+import {
+  beginTransformSession,
+  updateTransformSession,
+  type ComponentGeometry,
+  type TransformKind,
+  type TransformSession,
+} from './transform-session.js';
 
 type OverlayMode = 'canvas' | 'component';
 type Viewport = { scrollX: number; scrollY: number; zoom: number };
@@ -21,8 +28,6 @@ type StaticInstance = {
   variantKey?: string;
   props?: Record<string, unknown>;
 };
-type Geometry = { x: number; y: number; width?: number; height?: number; rotation: number };
-
 const isEditableTarget = (target: EventTarget | null) => target instanceof HTMLElement
   && (target.isContentEditable || Boolean(target.closest('input, textarea, select')));
 
@@ -102,11 +107,20 @@ function Demo() {
 
 function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: StaticInstance; mode: OverlayMode; zoom: number; selected: boolean; onSelect: () => void }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const scalerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const geometryRef = useRef<Geometry>({ x: instance.x ?? 0, y: instance.y ?? 0, width: instance.width, height: instance.height, rotation: instance.rotation ?? 0 });
-  const [geometry, setGeometry] = useState(geometryRef.current);
+  const committedGeometry: ComponentGeometry = {
+    x: instance.x ?? 0,
+    y: instance.y ?? 0,
+    width: instance.width ?? instance.naturalWidth ?? 0,
+    height: instance.height ?? instance.naturalHeight ?? 0,
+    rotation: instance.rotation ?? 0,
+  };
+  const geometryRef = useRef<ComponentGeometry>(committedGeometry);
   const [natural, setNatural] = useState({ width: instance.naturalWidth ?? 0, height: instance.naturalHeight ?? 0 });
-  const dragRef = useRef<{ kind: 'move' | 'resize' | 'rotate'; startX: number; startY: number; initial: Geometry; centerX?: number; centerY?: number }>();
+  const naturalRef = useRef(natural);
+  const dragRef = useRef<TransformSession>();
+  const frameRef = useRef<number>();
   const [clicks, setClicks] = useState(Number(instance.props?.clicks) || 0);
   const [date, setDate] = useState(String(instance.props?.value || '2026-09-03'));
   const [checked, setChecked] = useState(Boolean(instance.props?.checked));
@@ -115,18 +129,54 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
 
   useEffect(() => {
     if (dragRef.current) return;
-    const next = { x: instance.x ?? 0, y: instance.y ?? 0, width: instance.width, height: instance.height, rotation: instance.rotation ?? 0 };
+    const next: ComponentGeometry = {
+      x: instance.x ?? 0,
+      y: instance.y ?? 0,
+      width: instance.width ?? instance.naturalWidth ?? (naturalRef.current.width || 1),
+      height: instance.height ?? instance.naturalHeight ?? (naturalRef.current.height || 1),
+      rotation: instance.rotation ?? 0,
+    };
     geometryRef.current = next;
-    setGeometry(next);
-  }, [instance.x, instance.y, instance.width, instance.height, instance.rotation]);
+  }, [instance.x, instance.y, instance.width, instance.height, instance.naturalWidth, instance.naturalHeight, instance.rotation]);
 
-  const updateGeometry = (next: Geometry) => {
-    geometryRef.current = next;
-    setGeometry(next);
+  useEffect(() => {
+    naturalRef.current = natural;
+  }, [natural]);
+
+  useEffect(() => () => {
+    if (frameRef.current !== undefined) cancelAnimationFrame(frameRef.current);
+  }, []);
+
+  const applyGeometry = (next: ComponentGeometry) => {
+    const surface = surfaceRef.current;
+    const scaler = scalerRef.current;
+    if (!surface || !scaler) return;
+    const naturalWidth = naturalRef.current.width || 1;
+    const naturalHeight = naturalRef.current.height || 1;
+    surface.style.width = `${next.width}px`;
+    surface.style.height = `${next.height}px`;
+    surface.style.transform = `translate3d(${next.x}px, ${next.y}px, 0) rotate(${next.rotation}rad)`;
+    scaler.style.transform = `scale(${next.width / naturalWidth}, ${next.height / naturalHeight})`;
   };
-  const reportTransform = (type = OverlayEvent.componentTransform) => {
+
+  const scheduleGeometry = (next: ComponentGeometry) => {
+    geometryRef.current = next;
+    if (frameRef.current !== undefined) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = undefined;
+      applyGeometry(geometryRef.current);
+    });
+  };
+
+  const flushGeometry = (next: ComponentGeometry) => {
+    if (frameRef.current !== undefined) cancelAnimationFrame(frameRef.current);
+    frameRef.current = undefined;
+    geometryRef.current = next;
+    applyGeometry(next);
+  };
+  const reportTransform = () => {
     const current = geometryRef.current;
-    send(type, instance.id, surfaceRef.current, { ...current, naturalWidth: natural.width, naturalHeight: natural.height });
+    send(OverlayEvent.componentDrop, instance.id, surfaceRef.current, { ...current, naturalWidth: natural.width, naturalHeight: natural.height });
   };
 
   useEffect(() => {
@@ -153,44 +203,47 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
     return () => window.removeEventListener('message', receive);
   }, [instance.id, natural]);
 
-  const width = geometry.width || natural.width || 1;
-  const height = geometry.height || natural.height || 1;
+  const width = committedGeometry.width || natural.width || 1;
+  const height = committedGeometry.height || natural.height || 1;
   const scaleX = natural.width ? width / natural.width : 1;
   const scaleY = natural.height ? height / natural.height : 1;
 
-  const begin = (event: React.PointerEvent, kind: 'move' | 'resize' | 'rotate') => {
-    if (mode !== 'component' || (kind === 'move' && !event.altKey)) return;
+  const begin = (event: React.PointerEvent, kind: TransformKind) => {
+    if (mode !== 'component') return;
     event.preventDefault();
     event.stopPropagation();
     onSelect();
     event.currentTarget.setPointerCapture(event.pointerId);
     const initial = { ...geometryRef.current, width, height };
     const surfaceRect = surfaceRef.current?.getBoundingClientRect();
-    dragRef.current = {
+    dragRef.current = beginTransformSession(
       kind,
-      startX: event.clientX,
-      startY: event.clientY,
       initial,
-      centerX: surfaceRect ? surfaceRect.left + surfaceRect.width / 2 : undefined,
-      centerY: surfaceRect ? surfaceRect.top + surfaceRect.height / 2 : undefined,
-    };
+      { x: event.clientX, y: event.clientY },
+      surfaceRect ? { x: surfaceRect.left + surfaceRect.width / 2, y: surfaceRect.top + surfaceRect.height / 2 } : undefined,
+    );
   };
   const move = (event: React.PointerEvent) => {
     const drag = dragRef.current;
     if (!drag) return;
-    const dx = (event.clientX - drag.startX) / zoom;
-    const dy = (event.clientY - drag.startY) / zoom;
-    if (drag.kind === 'move') updateGeometry({ ...drag.initial, x: drag.initial.x + dx, y: drag.initial.y + dy });
-    if (drag.kind === 'resize') updateGeometry({ ...drag.initial, width: Math.max(24, (drag.initial.width || width) + dx), height: Math.max(24, (drag.initial.height || height) + dy) });
-    if (drag.kind === 'rotate' && drag.centerX !== undefined && drag.centerY !== undefined) {
-      const rotation = Math.atan2(event.clientY - drag.centerY, event.clientX - drag.centerX) + Math.PI / 2;
-      updateGeometry({ ...drag.initial, rotation: event.shiftKey ? Math.round(rotation / (Math.PI / 12)) * (Math.PI / 12) : rotation });
-    }
+    scheduleGeometry(updateTransformSession(
+      drag,
+      { x: event.clientX, y: event.clientY },
+      { zoom, snapRotation: event.shiftKey },
+    ));
   };
   const finish = () => {
-    if (!dragRef.current) return;
+    const drag = dragRef.current;
+    if (!drag) return;
     dragRef.current = undefined;
-    reportTransform(OverlayEvent.componentDrop);
+    flushGeometry(drag.current);
+    reportTransform();
+  };
+  const cancel = () => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    dragRef.current = undefined;
+    flushGeometry(drag.initial);
   };
 
   const common = { component: instance.componentKey };
@@ -209,19 +262,29 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
       ref={surfaceRef}
       data-component-id={instance.id}
       className={`component-surface${selected ? ' is-selected' : ''}`}
-      style={{ width, height, transform: `translate3d(${geometry.x}px, ${geometry.y}px, 0) rotate(${geometry.rotation}rad)` }}
-      onPointerDownCapture={(event) => { if (mode === 'component') onSelect(); if (event.altKey) begin(event, 'move'); }}
-      onPointerMove={move}
-      onPointerUp={finish}
-      onPointerCancel={finish}
+      style={{ width, height, transform: `translate3d(${committedGeometry.x}px, ${committedGeometry.y}px, 0) rotate(${committedGeometry.rotation}rad)` }}
+      onPointerDownCapture={() => { if (mode === 'component') onSelect(); }}
     >
-      <div className="component-content-scaler" style={{ width: natural.width || 'max-content', height: natural.height || 'max-content', transform: `scale(${scaleX}, ${scaleY})` }}>
+      <div ref={scalerRef} className="component-content-scaler" style={{ width: natural.width || 'max-content', height: natural.height || 'max-content', transform: `scale(${scaleX}, ${scaleY})` }}>
         <div ref={contentRef} className="component-natural-content">{child}</div>
       </div>
-      {instance.sequence && <span className="component-sequence">{instance.sequence}</span>}
+      {instance.sequence && (
+        <button
+          type="button"
+          aria-label={`移动组件 ${instance.sequence}`}
+          className="component-sequence"
+          onPointerDown={(event) => begin(event, 'move')}
+          onPointerMove={move}
+          onPointerUp={finish}
+          onPointerCancel={cancel}
+          onLostPointerCapture={finish}
+        >
+          {instance.sequence}
+        </button>
+      )}
       {selected && mode === 'component' && <>
-        <button type="button" aria-label="旋转组件" className="component-rotate-handle" onPointerDown={(event) => begin(event, 'rotate')} onPointerMove={move} onPointerUp={finish} />
-        <button type="button" aria-label="缩放组件" className="component-resize-handle" onPointerDown={(event) => begin(event, 'resize')} onPointerMove={move} onPointerUp={finish} />
+        <button type="button" aria-label="旋转组件" className="component-rotate-handle" onPointerDown={(event) => begin(event, 'rotate')} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onLostPointerCapture={finish} />
+        <button type="button" aria-label="缩放组件" className="component-resize-handle" onPointerDown={(event) => begin(event, 'resize')} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onLostPointerCapture={finish} />
       </>}
     </div>
   );

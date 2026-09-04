@@ -9,7 +9,6 @@ export const OverlayEvent = Object.freeze({
   dateChange: 'date-change',
   componentMove: 'component-move',
   componentDrop: 'component-drop',
-  componentTransform: 'component-transform',
   componentBounds: 'component-bounds',
 });
 
