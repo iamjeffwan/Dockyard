@@ -61,6 +61,7 @@ function Demo() {
       }
     };
     window.addEventListener('message', receive);
+    postOverlayMessage(OverlayEvent.moduleReady, { module: 'carbon-static-module', version: '0.1.0' });
     return () => window.removeEventListener('message', receive);
   }, []);
 
@@ -214,4 +215,3 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
 }
 
 createRoot(document.getElementById('root')!).render(<Demo />);
-postOverlayMessage(OverlayEvent.moduleReady, { module: 'carbon-static-module', version: '0.1.0' });

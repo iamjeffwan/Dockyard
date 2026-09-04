@@ -110,12 +110,19 @@ export function StorybookSidebar({
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
   useEffect(() => {
     const request = window.dockyard?.storybookSources();
-    if (!request) { setStatus("请在 Electron 中打开远程目录"); return; }
+    if (!request) {
+      setSources([staticCatalog.source]);
+      setSourceId(staticSource.id);
+      setSearchSourceIds([staticSource.id]);
+      setStatus(`${STATIC_COMPONENTS.length} 个静态组件`);
+      return;
+    }
     void request.then((items) => {
-      setSources(items || []);
-      const next = selection?.sourceId || items?.[0]?.id || "";
+      const nextSources = [staticCatalog.source, ...(items || []).filter((item) => item.id !== staticSource.id)];
+      setSources(nextSources);
+      const next = selection?.sourceId || nextSources[0]?.id || "";
       setSourceId(next);
-      setSearchSourceIds((current) => current.length ? current : (items || []).map((item) => item.id));
+      setSearchSourceIds((current) => current.length ? current : nextSources.map((item) => item.id));
     }).catch(() => setStatus("来源读取失败"));
   }, [selection?.sourceId]);
   useEffect(() => {

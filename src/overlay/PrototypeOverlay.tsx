@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentInstance } from "../types.js";
 import type { ViewportChannel, ViewportSnapshot } from "./viewport-channel.js";
+import { isOverlayMessage, isRuntimeReadyMessage, RuntimeCommand, RuntimeEvent, runtimeCommand } from "./runtime-protocol.js";
 import "./styles.css";
-
-const OVERLAY_PROTOCOL = "dockyard-overlay";
 
 type OverlayMode = "canvas" | "component";
 
@@ -73,6 +72,14 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
   const instances = useMemo(() => staticComponents.map(toRuntimeInstance), [staticComponents]);
   const source = useMemo(() => manifestUrl ? runtimeUrl(manifestUrl) : "", [manifestUrl]);
 
+  const sendRuntimeState = useCallback(() => {
+    const frameWindow = frameRef.current?.contentWindow;
+    if (!frameWindow) return;
+    frameWindow.postMessage(runtimeCommand(RuntimeCommand.viewport, viewportPayload(viewport.getSnapshot())), "*");
+    frameWindow.postMessage(runtimeCommand(RuntimeCommand.setMode, { mode }), "*");
+    frameWindow.postMessage(runtimeCommand(RuntimeCommand.setInstances, { instances }), "*");
+  }, [instances, mode, viewport]);
+
   useEffect(() => {
     onCommitRef.current = onCommit;
   }, [onCommit]);
@@ -81,24 +88,28 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
 
   useEffect(() => {
     const frameWindow = frameRef.current?.contentWindow;
-    frameWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "viewport", ...viewportPayload(viewportState) }, "*");
+    frameWindow?.postMessage(runtimeCommand(RuntimeCommand.viewport, viewportPayload(viewportState)), "*");
   }, [viewportState]);
 
   useEffect(() => {
     const frameWindow = frameRef.current?.contentWindow;
-    frameWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "set-mode", mode }, "*");
+    frameWindow?.postMessage(runtimeCommand(RuntimeCommand.setMode, { mode }), "*");
   }, [mode, source]);
 
   useEffect(() => {
-    frameRef.current?.contentWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "set-instances", instances }, "*");
+    frameRef.current?.contentWindow?.postMessage(runtimeCommand(RuntimeCommand.setInstances, { instances }), "*");
   }, [instances]);
 
   useEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.source !== frameRef.current?.contentWindow || event.data?.protocol !== OVERLAY_PROTOCOL) return;
+      if (event.source !== frameRef.current?.contentWindow || !isOverlayMessage(event.data)) return;
+      if (isRuntimeReadyMessage(event.data)) {
+        sendRuntimeState();
+        return;
+      }
       const instanceId = typeof event.data.componentId === "string" ? event.data.componentId : "";
       if (!instanceId) return;
-      if (event.data.type === "component-bounds") {
+      if (event.data.type === RuntimeEvent.componentBounds) {
         const naturalWidth = Number(event.data.naturalWidth ?? event.data.width);
         const naturalHeight = Number(event.data.naturalHeight ?? event.data.height);
         if (naturalWidth > 0 && naturalHeight > 0) {
@@ -114,7 +125,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
         }
         return;
       }
-      if (event.data.type !== "component-drop" && event.data.type !== "component-transform") return;
+      if (event.data.type !== RuntimeEvent.componentDrop && event.data.type !== RuntimeEvent.componentTransform) return;
       const values = ["x", "y", "width", "height", "rotation"] as const;
       const patch: Partial<ComponentInstance> = {};
       for (const key of values) {
@@ -125,16 +136,9 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
     };
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
-  }, [staticComponents]);
+  }, [sendRuntimeState, staticComponents]);
 
   if (!source) return null;
-
-  const sendInitialState = () => {
-    const frameWindow = frameRef.current?.contentWindow;
-    frameWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "viewport", ...viewportPayload(viewport.getSnapshot()) }, "*");
-    frameWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "set-mode", mode }, "*");
-    frameWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "set-instances", instances }, "*");
-  };
 
   return (
     <>
@@ -149,7 +153,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
           ref={frameRef}
           title="共享静态组件层"
           src={source}
-          onLoad={sendInitialState}
+          onLoad={sendRuntimeState}
           style={{ width: "100%", height: "100%", border: 0, background: "transparent" }}
         />
       </div>
