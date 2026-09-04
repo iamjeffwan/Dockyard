@@ -140,7 +140,7 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativ
         }
         return;
       }
-      if (event.data.type !== RuntimeEvent.componentDrop && event.data.type !== RuntimeEvent.componentTransform) return;
+      if (event.data.type !== RuntimeEvent.componentDrop) return;
       const values = ["x", "y", "width", "height", "rotation"] as const;
       const patch: Partial<ComponentInstance> = {};
       for (const key of values) {

@@ -6,7 +6,6 @@ export const RuntimeEvent = {
   nativeToolShortcut: "native-tool-shortcut",
   componentBounds: "component-bounds",
   componentDrop: "component-drop",
-  componentTransform: "component-transform",
 } as const;
 
 export const RuntimeCommand = {
