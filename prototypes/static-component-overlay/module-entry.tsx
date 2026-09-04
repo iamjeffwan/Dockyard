@@ -40,7 +40,7 @@ function Demo() {
   const [mode, setMode] = useState<OverlayMode>('canvas');
   const [viewport, setViewport] = useState<Viewport>({ scrollX: 0, scrollY: 0, zoom: 1 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const instances = readInstances();
+  const [instances, setInstances] = useState(readInstances);
 
   useEffect(() => {
     const receive = (event: MessageEvent) => {
@@ -55,6 +55,9 @@ function Demo() {
           scrollY: Number(event.data.scrollY) || 0,
           zoom: Math.max(0.01, Number(event.data.zoom) || 1),
         });
+      }
+      if (event.data.type === HostCommand.setInstances && Array.isArray(event.data.instances)) {
+        setInstances(event.data.instances as StaticInstance[]);
       }
     };
     window.addEventListener('message', receive);
@@ -96,6 +99,13 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
   const [choice, setChoice] = useState(String(instance.props?.selectedItem || 'one'));
   const [toggled, setToggled] = useState(Boolean(instance.props?.toggled));
 
+  useEffect(() => {
+    if (dragRef.current) return;
+    const next = { x: instance.x ?? 0, y: instance.y ?? 0, width: instance.width, height: instance.height, rotation: instance.rotation ?? 0 };
+    geometryRef.current = next;
+    setGeometry(next);
+  }, [instance.x, instance.y, instance.width, instance.height, instance.rotation]);
+
   const updateGeometry = (next: Geometry) => {
     geometryRef.current = next;
     setGeometry(next);
@@ -109,9 +119,8 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
     const node = contentRef.current;
     if (!node) return;
     const measure = () => {
-      const rect = node.getBoundingClientRect();
-      const width = Math.max(1, rect.width);
-      const height = Math.max(1, rect.height);
+      const width = Math.max(1, node.offsetWidth);
+      const height = Math.max(1, node.offsetHeight);
       setNatural((current) => current.width === width && current.height === height ? current : { width, height });
       send(OverlayEvent.componentBounds, instance.id, surfaceRef.current, { naturalWidth: width, naturalHeight: height });
     };

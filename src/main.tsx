@@ -689,17 +689,10 @@ function AnnotatorView() {
     }));
     setStatus(`${candidate.name} 已加入画稿`);
   };
-  const staticCarbonComponentKey = (story: StorybookStory) => {
-    const value = `${story.id} ${story.name} ${story.title}`.toLowerCase();
-    const match = value.match(/(button|date.?picker|checkbox|dropdown|toggle)/);
-    return match ? `carbon-${match[1].replace('datepicker', 'date-picker')}` : undefined;
-  };
-
   const insertStory = (story: StorybookStory, centerX: number, centerY: number) => {
     if (!artwork) return;
-    const staticKey = staticCarbonComponentKey(story);
-    const definition = staticKey ? staticComponentByKey(staticKey) : undefined;
     const source = STATIC_SOURCES[0];
+    const definition = story.sourceId === source?.id ? staticComponentByKey(story.id) : undefined;
     if (!definition || !source) {
       setStatus(`${story.title} / ${story.name} 尚未适配静态组件模块`);
       return;

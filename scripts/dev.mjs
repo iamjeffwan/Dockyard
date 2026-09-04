@@ -9,6 +9,7 @@ const viteCli = join(root, 'node_modules', 'vite', 'bin', 'vite.js');
 const electronBin = join(root, 'node_modules', 'electron', 'dist', 'electron.exe');
 const electronTsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 const staticComponentConfig = join(root, 'prototypes', 'static-component-overlay', 'vite.config.mjs');
+const staticComponentStage = join(root, 'scripts', 'stage-static-components.mjs');
 const logRoot = join(root, '.tmp', 'logs');
 let vite = null;
 let electron = null;
@@ -73,6 +74,8 @@ if (await portOpen()) {
   mkdirSync(logRoot, { recursive: true });
   const staticComponents = spawnSync(process.execPath, [viteCli, 'build', '--config', staticComponentConfig], { cwd: root, stdio: 'inherit', windowsHide: false });
   if (staticComponents.status !== 0) process.exit(staticComponents.status || 1);
+  const stagedStaticComponents = spawnSync(process.execPath, [staticComponentStage], { cwd: root, stdio: 'inherit', windowsHide: false });
+  if (stagedStaticComponents.status !== 0) process.exit(stagedStaticComponents.status || 1);
   const compile = spawnSync(process.execPath, [electronTsc, '-p', join(root, 'tsconfig.electron.json')], { cwd: root, stdio: 'inherit', windowsHide: false });
   if (compile.status !== 0) process.exit(compile.status || 1);
   vite = spawn(process.execPath, [viteCli], { cwd: root, stdio: 'inherit', windowsHide: false, shell: false });

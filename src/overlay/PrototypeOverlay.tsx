@@ -71,11 +71,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
   );
   const manifestUrl = staticComponents[0]?.staticModule?.manifestUrl;
   const instances = useMemo(() => staticComponents.map(toRuntimeInstance), [staticComponents]);
-  const source = useMemo(() => {
-    if (!manifestUrl) return "";
-    const params = new URLSearchParams({ instances: JSON.stringify(instances) });
-    return `${runtimeUrl(manifestUrl)}?${params.toString()}`;
-  }, [instances, manifestUrl]);
+  const source = useMemo(() => manifestUrl ? runtimeUrl(manifestUrl) : "", [manifestUrl]);
 
   useEffect(() => {
     onCommitRef.current = onCommit;
@@ -92,6 +88,10 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
     const frameWindow = frameRef.current?.contentWindow;
     frameWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "set-mode", mode }, "*");
   }, [mode, source]);
+
+  useEffect(() => {
+    frameRef.current?.contentWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "set-instances", instances }, "*");
+  }, [instances]);
 
   useEffect(() => {
     const receive = (event: MessageEvent) => {
@@ -133,6 +133,7 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
     const frameWindow = frameRef.current?.contentWindow;
     frameWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "viewport", ...viewportPayload(viewport.getSnapshot()) }, "*");
     frameWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "set-mode", mode }, "*");
+    frameWindow?.postMessage({ protocol: OVERLAY_PROTOCOL, version: "1", type: "set-instances", instances }, "*");
   };
 
   return (

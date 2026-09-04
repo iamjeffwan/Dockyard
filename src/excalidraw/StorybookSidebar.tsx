@@ -28,7 +28,29 @@ import type {
 } from "../types.js";
 import { StorybookSourceMultiSelect } from "./StorybookSourceMultiSelect.js";
 import { groupStoriesBySource } from "./storybook-source-groups.js";
+import { STATIC_COMPONENTS, STATIC_SOURCES } from "../static-components/registry.js";
 const recognitionPrompt = "这是一张不完整的 UI 开发草图。请根据轮廓、位置关系、文字区域和交互暗示推测组件类型。优先使用 shadcn/ui 或 Radix UI 等组件库中的标准组件名称。不要生成代码。";
+
+const staticSource = STATIC_SOURCES[0];
+const staticCatalog: StorybookCatalog = {
+  source: {
+    id: staticSource.id,
+    name: staticSource.name,
+    baseUrl: "",
+    indexUrl: staticSource.manifestUrl,
+    allowedOrigin: "",
+    status: "ready",
+    storyCount: STATIC_COMPONENTS.length,
+  },
+  stories: STATIC_COMPONENTS.map((component) => ({
+    id: component.key,
+    title: component.categoryPath.join(" / "),
+    name: component.name,
+    type: "story",
+    sourceId: staticSource.id,
+    storyUrl: "",
+  })),
+};
 
 const LazySidebarShell = lazy(async () => {
   const module = await import("./ui.js");
@@ -98,6 +120,7 @@ export function StorybookSidebar({
   }, [selection?.sourceId]);
   useEffect(() => {
     if (!sourceId) { setCatalog(null); return; }
+    if (sourceId === staticSource.id) { setCatalog(staticCatalog); return; }
     const request = window.dockyard?.storybookCatalog(sourceId);
     if (!request) return;
     void request.then(setCatalog).catch(() => setCatalog(null));
@@ -109,7 +132,7 @@ export function StorybookSidebar({
       setStatus("请选择组件来源");
       return;
     }
-    const requests = searchSourceIds.map((id) => window.dockyard?.storybookCatalog(id));
+    const requests = searchSourceIds.map((id) => id === staticSource.id ? Promise.resolve(staticCatalog) : window.dockyard?.storybookCatalog(id));
     if (requests.some((request) => !request)) {
       setCatalogs([]);
       setStatus("请在 Electron 中打开远程目录");
