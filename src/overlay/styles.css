@@ -1,17 +1,45 @@
-.prototype-overlay-layer { position: absolute; inset: 0; z-index: 15; overflow: visible; pointer-events: none; transform-origin: 0 0; will-change: transform; }
-.prototype-overlay-layer.is-active { pointer-events: auto; }
-.prototype-overlay-shell { position: absolute; overflow: visible; pointer-events: none; will-change: transform; }
-.prototype-overlay-item { position: absolute; inset: 0; overflow: visible; transform-origin: center center; pointer-events: none; will-change: transform; }
-.prototype-overlay-layer.is-active .prototype-overlay-shell { pointer-events: auto; cursor: grab; }
-.prototype-overlay-layer.is-active .prototype-overlay-item { pointer-events: auto; }
-.prototype-overlay-item.is-selected { outline: 1px solid #6965db; outline-offset: 2px; }
-.prototype-overlay-scaler { position: relative; overflow: hidden; transform-origin: 0 0; pointer-events: none; }
-.prototype-overlay-scaler iframe { position: absolute; inset: 0 auto auto 0; display: block; border: 0; background: transparent; pointer-events: none; }
-.prototype-overlay-sequence { position: absolute; top: 0; left: 0; z-index: 4; display: inline-grid; min-width: 22px; height: 18px; place-items: center; padding: 0 5px; border-radius: 9px; background: #d92d20; color: #fff; font-size: 11px; font-weight: 700; line-height: 1; pointer-events: none; will-change: transform; }
-.prototype-overlay-handle { position: absolute; z-index: 3; width: 10px; height: 10px; border: 1px solid #6965db; border-radius: 2px; background: #fff; }
-.prototype-overlay-handle.nw { top: -5px; left: -5px; cursor: nwse-resize; }
-.prototype-overlay-handle.ne { top: -5px; right: -5px; cursor: nesw-resize; }
-.prototype-overlay-handle.sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
-.prototype-overlay-handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
-.prototype-overlay-rotate { position: absolute; top: -29px; left: 50%; z-index: 3; width: 13px; height: 13px; margin-left: -6.5px; border: 1.5px solid #6965db; border-radius: 50%; background: #fff; cursor: grab; }
-.prototype-overlay-fallback-size { position: absolute; right: 4px; bottom: 3px; z-index: 3; padding: 1px 4px; border-radius: 3px; background: rgb(255 255 255 / 88%); color: #6965db; font-size: 10px; line-height: 1.2; pointer-events: none; }
+.prototype-overlay-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.prototype-overlay-shared iframe { display: block; pointer-events: none; }
+.prototype-overlay-shared.is-active,
+.prototype-overlay-shared.is-active iframe { pointer-events: auto; }
+
+.prototype-overlay-mode-switch {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 18;
+  display: flex;
+  padding: 3px;
+  border: 1px solid #d6d6d6;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.prototype-overlay-mode-switch button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #525252;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.prototype-overlay-mode-switch button.is-selected {
+  background: #0f62fe;
+  color: #fff;
+}
+
+.prototype-overlay-mode-switch button:focus-visible { outline: 2px solid #0f62fe; outline-offset: 2px; }
