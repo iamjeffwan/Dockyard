@@ -97,6 +97,47 @@ const runtimeReady = await waitFor(() => evaluate(annotator, `(() => {
   return frame ? { className, source: frame.src } : null;
 })()`));
 assert.match(runtimeReady.className, /is-component/, `共享运行页未进入组件模式：${runtimeReady.source}`);
+const layering = await evaluate(annotator, `(() => {
+  const frame = document.querySelector('.prototype-overlay-shared iframe');
+  const host = document.querySelector('[data-dockyard-overlay-host]');
+  const layerUi = document.querySelector('.layer-ui__wrapper');
+  const interactiveCanvas = document.querySelector('canvas.interactive');
+  const componentTool = document.querySelector('[data-testid=toolbar-component]')?.closest('label');
+  const sidebarTrigger = document.querySelector('.sidebar-trigger');
+  const isTopElement = (node) => {
+    if (!node) return false;
+    const rect = node.getBoundingClientRect();
+    const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return node === top || node.contains(top);
+  };
+  const frameStyles = frame?.contentWindow?.getComputedStyle(frame.contentDocument.documentElement);
+  const bodyStyles = frame?.contentWindow?.getComputedStyle(frame.contentDocument.body);
+  const root = frame?.contentDocument?.querySelector('#root');
+  const rootStyles = root ? frame.contentWindow.getComputedStyle(root) : null;
+  const zIndex = (node) => Number(node ? getComputedStyle(node).zIndex : 0);
+  return {
+    hostCount: document.querySelectorAll('[data-dockyard-overlay-host]').length,
+    hostInsideCanvas: host?.parentElement?.classList.contains('excalidraw') || false,
+    aboveCanvas: zIndex(host) > zIndex(interactiveCanvas),
+    belowUi: zIndex(host) < zIndex(layerUi),
+    htmlBackground: frameStyles?.backgroundColor || '',
+    bodyBackground: bodyStyles?.backgroundColor || '',
+    rootBackground: rootStyles?.backgroundColor || '',
+    componentToolClickable: isTopElement(componentTool),
+    sidebarTriggerClickable: isTopElement(sidebarTrigger),
+  };
+})()`);
+assert.deepEqual(layering, {
+  hostCount: 1,
+  hostInsideCanvas: true,
+  aboveCanvas: true,
+  belowUi: true,
+  htmlBackground: 'rgba(0, 0, 0, 0)',
+  bodyBackground: 'rgba(0, 0, 0, 0)',
+  rootBackground: 'rgba(0, 0, 0, 0)',
+  componentToolClickable: true,
+  sidebarTriggerClickable: true,
+});
 await evaluate(annotator, `(() => {
   const frame = document.querySelector('.prototype-overlay-shared iframe');
   const target = frame.contentDocument.querySelector('button') || frame.contentDocument.body;
@@ -138,4 +179,4 @@ const remounted = await evaluate(annotator, `(() => ({
 }))()`);
 assert.deepEqual(remounted, { hosts: 1, tools: 1, componentChecked: true });
 
-console.log("顶部组件工具端到端验证通过。");
+console.log("顶部组件工具与覆盖层层级端到端验证通过。");
