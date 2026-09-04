@@ -1,7 +1,7 @@
 .dockyard-overlay-host {
   position: absolute;
   inset: 0;
-  z-index: var(--zIndex-svgLayer);
+  z-index: var(--zIndex-interactiveCanvas);
   overflow: hidden;
   pointer-events: none;
 }

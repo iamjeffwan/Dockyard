@@ -104,39 +104,55 @@ const layering = await evaluate(annotator, `(() => {
   const interactiveCanvas = document.querySelector('canvas.interactive');
   const componentTool = document.querySelector('[data-testid=toolbar-component]')?.closest('label');
   const sidebarTrigger = document.querySelector('.sidebar-trigger');
+  const helpButton = document.querySelector('.help-icon');
+  const zoomButton = document.querySelector('.reset-zoom-button');
   const isTopElement = (node) => {
     if (!node) return false;
     const rect = node.getBoundingClientRect();
     const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
     return node === top || node.contains(top);
   };
+  const canvasRect = frame?.parentElement?.getBoundingClientRect();
+  const canvasCenter = canvasRect
+    ? document.elementFromPoint(canvasRect.left + canvasRect.width / 2, canvasRect.top + canvasRect.height / 2)
+    : null;
   const frameStyles = frame?.contentWindow?.getComputedStyle(frame.contentDocument.documentElement);
   const bodyStyles = frame?.contentWindow?.getComputedStyle(frame.contentDocument.body);
   const root = frame?.contentDocument?.querySelector('#root');
   const rootStyles = root ? frame.contentWindow.getComputedStyle(root) : null;
   const zIndex = (node) => Number(node ? getComputedStyle(node).zIndex : 0);
+  const canvasControlsZ = Number(getComputedStyle(host?.parentElement || document.documentElement)
+    .getPropertyValue('--zIndex-canvasButtons'));
   return {
     hostCount: document.querySelectorAll('[data-dockyard-overlay-host]').length,
     hostInsideCanvas: host?.parentElement?.classList.contains('excalidraw') || false,
-    aboveCanvas: zIndex(host) > zIndex(interactiveCanvas),
+    aboveCanvas: zIndex(host) >= zIndex(interactiveCanvas),
+    overlayReceivesCanvasPoint: canvasCenter === frame,
     belowUi: zIndex(host) < zIndex(layerUi),
+    belowCanvasControls: zIndex(host) < canvasControlsZ,
     htmlBackground: frameStyles?.backgroundColor || '',
     bodyBackground: bodyStyles?.backgroundColor || '',
     rootBackground: rootStyles?.backgroundColor || '',
     componentToolClickable: isTopElement(componentTool),
     sidebarTriggerClickable: isTopElement(sidebarTrigger),
+    helpButtonClickable: isTopElement(helpButton),
+    zoomButtonClickable: isTopElement(zoomButton),
   };
 })()`);
 assert.deepEqual(layering, {
   hostCount: 1,
   hostInsideCanvas: true,
   aboveCanvas: true,
+  overlayReceivesCanvasPoint: true,
   belowUi: true,
+  belowCanvasControls: true,
   htmlBackground: 'rgba(0, 0, 0, 0)',
   bodyBackground: 'rgba(0, 0, 0, 0)',
   rootBackground: 'rgba(0, 0, 0, 0)',
   componentToolClickable: true,
   sidebarTriggerClickable: true,
+  helpButtonClickable: true,
+  zoomButtonClickable: true,
 });
 await evaluate(annotator, `(() => {
   const frame = document.querySelector('.prototype-overlay-shared iframe');
