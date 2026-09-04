@@ -9,37 +9,3 @@
 .prototype-overlay-shared iframe { display: block; pointer-events: none; }
 .prototype-overlay-shared.is-active,
 .prototype-overlay-shared.is-active iframe { pointer-events: auto; }
-
-.prototype-overlay-mode-switch {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  z-index: 18;
-  display: flex;
-  padding: 3px;
-  border: 1px solid #d6d6d6;
-  border-radius: 8px;
-  background: rgb(255 255 255 / 96%);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
-  transform: translateX(-50%);
-  pointer-events: auto;
-}
-
-.prototype-overlay-mode-switch button {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: #525252;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.prototype-overlay-mode-switch button.is-selected {
-  background: #0f62fe;
-  color: #fff;
-}
-
-.prototype-overlay-mode-switch button:focus-visible { outline: 2px solid #0f62fe; outline-offset: 2px; }

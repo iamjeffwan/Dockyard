@@ -43,6 +43,7 @@ import {
 import {
   PrototypeOverlay,
   createViewportChannel,
+  type OverlayMode,
 } from "./overlay";
 import { ComponentInventory, StorybookSidebar } from "./excalidraw/index.js";
 import { createDeliveryModule } from "./delivery/module";
@@ -421,6 +422,7 @@ function AnnotatorView() {
   } | null>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportPreview, setExportPreview] = useState<string | null>(null);
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>("canvas");
   const artwork = activeArtwork(workspace);
   const delivery = useMemo(
     () =>
@@ -787,6 +789,8 @@ function AnnotatorView() {
           }
           onCreateArtwork={createArtworkFromNativeImage}
           onExternalDrop={handleCanvasExternalDrop}
+          overlayMode={overlayMode}
+          onOverlayModeChange={setOverlayMode}
           renderTopRightUI={() => (
             <Suspense fallback={null}>
               <LazySidebarTrigger />
@@ -823,7 +827,7 @@ function AnnotatorView() {
             <PrototypeOverlay
               components={artwork?.components || []}
               viewport={viewportChannel}
-              interactionEnabled={true}
+              mode={overlayMode}
               onCommit={(instanceId, patch) =>
                 updateArtwork((current) => ({
                   ...current,

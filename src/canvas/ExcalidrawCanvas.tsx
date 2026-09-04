@@ -20,6 +20,11 @@ import {
   excalidrawLibraryReturnUrl,
 } from "../excalidraw-library-host";
 import { emptyScene, ensureSourceScene, readImage } from "./scene";
+import type { OverlayMode } from "../overlay/mode.js";
+import {
+  DOCKYARD_COMPONENT_TOOL,
+  ExcalidrawComponentToolPortal,
+} from "../excalidraw/ExcalidrawComponentToolPortal.js";
 
 const LazyExcalidraw = lazy(async () => {
   const module = await import("@excalidraw/excalidraw");
@@ -46,6 +51,8 @@ export type ExcalidrawCanvasProps = {
   renderTopRightUI?: () => React.ReactElement | null;
   renderEditorUI?: (context: ExcalidrawCanvasContext) => ReactNode;
   overlay?: ReactNode;
+  overlayMode: OverlayMode;
+  onOverlayModeChange: (mode: OverlayMode) => void;
 };
 
 const sceneContentSignature = (value: SceneData) =>
@@ -67,6 +74,8 @@ export function ExcalidrawCanvas({
   renderTopRightUI,
   renderEditorUI,
   overlay,
+  overlayMode,
+  onOverlayModeChange,
 }: ExcalidrawCanvasProps) {
   const scene = useMemo(
     () => (artwork ? ensureSourceScene(artwork.scene, artwork.source) : emptyScene()),
@@ -189,6 +198,13 @@ export function ExcalidrawCanvas({
           onLibraryChange={onLibraryChange}
           generateIdForFile={generateIdForFile}
           onChange={(elements, appState, files) => {
+            if (
+              overlayMode === "component"
+              && (appState.activeTool.type !== "custom"
+                || appState.activeTool.customType !== DOCKYARD_COMPONENT_TOOL)
+            ) {
+              onOverlayModeChange("canvas");
+            }
             const bounds = canvasWrapRef.current?.getBoundingClientRect();
             viewport.publish(
               viewportFromAppState(appState, {
@@ -254,6 +270,38 @@ export function ExcalidrawCanvas({
             },
           }}
         >
+          <ExcalidrawComponentToolPortal
+            active={overlayMode === "component"}
+            onActivate={() => {
+              onOverlayModeChange("component");
+              if (excalidrawAPI) {
+                excalidrawAPI.updateScene({
+                  appState: {
+                    activeTool: {
+                      ...excalidrawAPI.getAppState().activeTool,
+                      type: "custom",
+                      customType: DOCKYARD_COMPONENT_TOOL,
+                    },
+                  },
+                });
+              }
+            }}
+            onCanvasToolActivate={() => onOverlayModeChange("canvas")}
+            onCanvasToolShortcut={(tool) => {
+              onOverlayModeChange("canvas");
+              if (excalidrawAPI) {
+                excalidrawAPI.updateScene({
+                  appState: {
+                    activeTool: {
+                      ...excalidrawAPI.getAppState().activeTool,
+                      type: tool,
+                      customType: null,
+                    },
+                  },
+                });
+              }
+            }}
+          />
           {renderEditorUI?.({ excalidrawAPI })}
         </LazyExcalidraw>
       </Suspense>

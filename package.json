@@ -18,6 +18,7 @@
     "verify:artwork-open": "node scripts/verify-artwork-open.mjs",
     "verify:project-picker": "node scripts/verify-project-picker.mjs",
     "verify:library-host": "node scripts/verify-library-host.mjs",
+    "verify:component-toolbar": "node scripts/verify-component-toolbar.mjs",
     "prototype:overlay:electron": "electron prototypes/excalidraw-component-overlay/electron-main.cjs",
     "build:static-components": "vite build --config prototypes/static-component-overlay/vite.config.mjs && node scripts/stage-static-components.mjs",
     "build": "pnpm run build:static-components && pnpm run generate:tokens && tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
