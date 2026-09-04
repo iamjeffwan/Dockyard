@@ -8,10 +8,11 @@ export const OverlayEvent = Object.freeze({
   dateChange: 'date-change',
   componentMove: 'component-move',
   componentDrop: 'component-drop',
+  componentTransform: 'component-transform',
   componentBounds: 'component-bounds',
 });
 
-export const HostCommand = Object.freeze({ measure: 'measure', retry: 'retry' });
+export const HostCommand = Object.freeze({ measure: 'measure', retry: 'retry', viewport: 'viewport', setMode: 'set-mode', setInstances: 'set-instances' });
 
 export function createOverlayMessage(type, payload = {}) {
   return { protocol: 'dockyard-overlay', version: OVERLAY_PROTOCOL_VERSION, type, ...payload };

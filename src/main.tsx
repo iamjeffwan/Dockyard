@@ -32,7 +32,7 @@ import type {
   Workspace,
   StorybookStory,
 } from "./types";
-import { STATIC_SOURCES } from "./static-components/registry.js";
+import { STATIC_SOURCES, staticComponentByKey } from "./static-components/registry.js";
 import {
   ExcalidrawCanvas,
   createImageElement,
@@ -689,38 +689,36 @@ function AnnotatorView() {
     }));
     setStatus(`${candidate.name} 已加入画稿`);
   };
-  const staticCarbonComponentKey = (story: StorybookStory) => {
-    const value = `${story.id} ${story.name} ${story.title}`.toLowerCase();
-    const match = value.match(/(button|date.?picker|checkbox|dropdown|toggle)/);
-    return match ? `carbon-${match[1].replace('datepicker', 'date-picker')}` : undefined;
-  };
-
-  const insertStory = (story: StorybookStory, x: number, y: number) => {
+  const insertStory = (story: StorybookStory, centerX: number, centerY: number) => {
     if (!artwork) return;
-    const staticKey = staticCarbonComponentKey(story);
+    const source = STATIC_SOURCES[0];
+    const definition = story.sourceId === source?.id ? staticComponentByKey(story.id) : undefined;
+    if (!definition || !source) {
+      setStatus(`${story.title} / ${story.name} 尚未适配静态组件模块`);
+      return;
+    }
+    const variant = definition.variants?.[0];
     const instance: ComponentInstance = {
-      id: story.id,
-      name: story.name,
-      library: story.sourceId,
+      id: definition.key,
+      name: definition.name,
+      library: source.name,
       previewKind: "reference",
-      description: story.title,
-      docsUrl: story.storyUrl,
+      description: definition.categoryPath.join(" / "),
       instanceId: uid("component"),
       elementId: "",
       sequence: nextComponentSequence(artwork.components),
       status: "confirmed",
-      sourceType: "storybook",
-      sourceId: story.sourceId,
-      storyId: story.id,
-      storyName: story.name,
-      storyTitle: story.title,
-      storyUrl: story.storyUrl,
       loadStatus: "loading",
-      ...(staticKey ? { sourceLibraryId: "carbon-react", componentKey: staticKey, staticModule: { manifestUrl: STATIC_SOURCES[0].manifestUrl, componentKey: staticKey, version: STATIC_SOURCES[0].version }, categoryPath: ["components", staticKey.replace(/^carbon-/, "")], variantKey: "default" } : {}),
-      x,
-      y,
-      width: 230,
-      height: 120,
+      sourceLibraryId: source.id,
+      componentKey: definition.key,
+      staticModule: { manifestUrl: source.manifestUrl, componentKey: definition.key, version: source.version },
+      categoryPath: definition.categoryPath,
+      variantKey: variant?.key,
+      props: variant?.props,
+      x: centerX - definition.defaultWidth / 2,
+      y: centerY - definition.defaultHeight / 2,
+      width: definition.defaultWidth,
+      height: definition.defaultHeight,
       rotation: 0,
     };
     updateArtwork((current) => ({ ...current, components: [...current.components, instance], updatedAt: now() }));
@@ -730,14 +728,14 @@ function AnnotatorView() {
     if (!artwork) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const current = viewportChannel.getSnapshot();
-    insertStory(story, (event.clientX - rect.left) / current.zoom - current.scrollX - 115, (event.clientY - rect.top) / current.zoom - current.scrollY - 60);
+    insertStory(story, (event.clientX - rect.left) / current.zoom - current.scrollX, (event.clientY - rect.top) / current.zoom - current.scrollY);
   };
   const addStory = (story: StorybookStory) => {
     if (!artwork) return;
     const current = viewportChannel.getSnapshot();
     const centerX = current.width / 2 / current.zoom - current.scrollX;
     const centerY = current.height / 2 / current.zoom - current.scrollY;
-    insertStory(story, centerX - 115, centerY - 60);
+    insertStory(story, centerX, centerY);
   };
   const handleCanvasExternalDrop = (event: React.DragEvent<HTMLDivElement>) => {
     const storyRaw = event.dataTransfer.getData("application/x-dockyard-story");
