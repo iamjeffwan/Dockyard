@@ -1,7 +1,6 @@
 .prototype-overlay-layer {
   position: absolute;
   inset: 0;
-  z-index: 15;
   overflow: hidden;
   pointer-events: none;
 }

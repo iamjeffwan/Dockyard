@@ -27,6 +27,7 @@ import {
   ExcalidrawComponentToolPortal,
 } from "../excalidraw/ExcalidrawComponentToolPortal.js";
 import type { NativeExcalidrawTool } from "../excalidraw/component-tool-shortcuts.js";
+import { ExcalidrawOverlayPortal } from "../excalidraw/ExcalidrawOverlayPortal.js";
 
 const LazyExcalidraw = lazy(async () => {
   const module = await import("@excalidraw/excalidraw");
@@ -308,7 +309,9 @@ export function ExcalidrawCanvas({
           {renderEditorUI?.({ excalidrawAPI, activateNativeTool })}
         </LazyExcalidraw>
       </Suspense>
-      {overlay?.({ excalidrawAPI, activateNativeTool })}
+      <ExcalidrawOverlayPortal>
+        {overlay?.({ excalidrawAPI, activateNativeTool })}
+      </ExcalidrawOverlayPortal>
       {!artwork && (
         <div className="canvas-empty-callout" aria-hidden="true">
           <ImagePlus size={26} />
