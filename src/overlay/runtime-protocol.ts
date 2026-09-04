@@ -3,6 +3,7 @@ export const OVERLAY_PROTOCOL_VERSION = "1";
 
 export const RuntimeEvent = {
   moduleReady: "module-ready",
+  nativeToolShortcut: "native-tool-shortcut",
   componentBounds: "component-bounds",
   componentDrop: "component-drop",
   componentTransform: "component-transform",
@@ -20,6 +21,14 @@ export function isOverlayMessage(value: unknown): value is Record<string, unknow
 
 export function isRuntimeReadyMessage(value: unknown) {
   return isOverlayMessage(value) && value.type === RuntimeEvent.moduleReady;
+}
+
+export function isRuntimeNativeToolShortcutMessage(
+  value: unknown,
+): value is Record<string, unknown> & { key: string } {
+  return isOverlayMessage(value)
+    && value.type === RuntimeEvent.nativeToolShortcut
+    && typeof value.key === "string";
 }
 
 export function runtimeCommand(type: string, payload: Record<string, unknown> = {}) {

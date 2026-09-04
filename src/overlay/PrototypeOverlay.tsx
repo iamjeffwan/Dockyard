@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentInstance } from "../types.js";
+import type { OverlayMode } from "./mode.js";
 import type { ViewportChannel, ViewportSnapshot } from "./viewport-channel.js";
-import { isOverlayMessage, isRuntimeReadyMessage, RuntimeCommand, RuntimeEvent, runtimeCommand } from "./runtime-protocol.js";
+import {
+  isOverlayMessage,
+  isRuntimeNativeToolShortcutMessage,
+  isRuntimeReadyMessage,
+  RuntimeCommand,
+  RuntimeEvent,
+  runtimeCommand,
+} from "./runtime-protocol.js";
 import "./styles.css";
-
-type OverlayMode = "canvas" | "component";
 
 type RuntimeInstance = {
   id: string;
@@ -24,8 +30,9 @@ type RuntimeInstance = {
 export type PrototypeOverlayProps = {
   components: ComponentInstance[];
   viewport: ViewportChannel;
-  interactionEnabled: boolean;
+  mode: OverlayMode;
   onCommit: (instanceId: string, patch: Partial<ComponentInstance>) => void;
+  onNativeToolShortcut: (key: string) => void;
 };
 
 function runtimeUrl(manifestUrl: string) {
@@ -59,11 +66,11 @@ function viewportPayload(viewport: ViewportSnapshot) {
   };
 }
 
-export function PrototypeOverlay({ components, viewport, interactionEnabled, onCommit }: PrototypeOverlayProps) {
-  const [mode, setMode] = useState<OverlayMode>("canvas");
+export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativeToolShortcut }: PrototypeOverlayProps) {
   const [viewportState, setViewportState] = useState(() => viewport.getSnapshot());
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const onCommitRef = useRef(onCommit);
+  const onNativeToolShortcutRef = useRef(onNativeToolShortcut);
   const staticComponents = useMemo(
     () => components.filter((item) => item.staticModule?.manifestUrl && (item.staticModule.componentKey || item.componentKey)),
     [components],
@@ -83,6 +90,10 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
   useEffect(() => {
     onCommitRef.current = onCommit;
   }, [onCommit]);
+
+  useEffect(() => {
+    onNativeToolShortcutRef.current = onNativeToolShortcut;
+  }, [onNativeToolShortcut]);
 
   useEffect(() => viewport.subscribe(() => setViewportState(viewport.getSnapshot())), [viewport]);
 
@@ -105,6 +116,10 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
       if (event.source !== frameRef.current?.contentWindow || !isOverlayMessage(event.data)) return;
       if (isRuntimeReadyMessage(event.data)) {
         sendRuntimeState();
+        return;
+      }
+      if (isRuntimeNativeToolShortcutMessage(event.data)) {
+        onNativeToolShortcutRef.current(event.data.key);
         return;
       }
       const instanceId = typeof event.data.componentId === "string" ? event.data.componentId : "";
@@ -141,22 +156,14 @@ export function PrototypeOverlay({ components, viewport, interactionEnabled, onC
   if (!source) return null;
 
   return (
-    <>
-      {interactionEnabled && (
-        <div className="prototype-overlay-mode-switch" role="group" aria-label="画板操作模式">
-          <button type="button" className={mode === "canvas" ? "is-selected" : ""} aria-pressed={mode === "canvas"} onClick={() => setMode("canvas")}>画板模式</button>
-          <button type="button" className={mode === "component" ? "is-selected" : ""} aria-pressed={mode === "component"} onClick={() => setMode("component")}>组件交互模式</button>
-        </div>
-      )}
-      <div className={`prototype-overlay-layer prototype-overlay-shared${mode === "component" ? " is-active" : ""}`}>
-        <iframe
-          ref={frameRef}
-          title="共享静态组件层"
-          src={source}
-          onLoad={sendRuntimeState}
-          style={{ width: "100%", height: "100%", border: 0, background: "transparent" }}
-        />
-      </div>
-    </>
+    <div className={`prototype-overlay-layer prototype-overlay-shared${mode === "component" ? " is-active" : ""}`}>
+      <iframe
+        ref={frameRef}
+        title="共享静态组件层"
+        src={source}
+        onLoad={sendRuntimeState}
+        style={{ width: "100%", height: "100%", border: 0, background: "transparent" }}
+      />
+    </div>
   );
 }

@@ -4,6 +4,7 @@ export const OverlayEvent = Object.freeze({
   moduleLoading: 'module-loading',
   moduleReady: 'module-ready',
   moduleError: 'module-error',
+  nativeToolShortcut: 'native-tool-shortcut',
   componentClick: 'component-click',
   dateChange: 'date-change',
   componentMove: 'component-move',

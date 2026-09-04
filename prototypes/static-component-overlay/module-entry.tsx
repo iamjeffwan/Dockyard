@@ -23,6 +23,9 @@ type StaticInstance = {
 };
 type Geometry = { x: number; y: number; width?: number; height?: number; rotation: number };
 
+const isEditableTarget = (target: EventTarget | null) => target instanceof HTMLElement
+  && (target.isContentEditable || Boolean(target.closest('input, textarea, select')));
+
 const readInstances = (): StaticInstance[] => {
   const params = new URLSearchParams(location.search);
   const raw = params.get('instances');
@@ -64,6 +67,16 @@ function Demo() {
     postOverlayMessage(OverlayEvent.moduleReady, { module: 'carbon-static-module', version: '0.1.0' });
     return () => window.removeEventListener('message', receive);
   }, []);
+
+  useEffect(() => {
+    if (mode !== 'component') return;
+    const forwardNativeToolShortcut = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
+      postOverlayMessage(OverlayEvent.nativeToolShortcut, { key: event.key });
+    };
+    window.addEventListener('keydown', forwardNativeToolShortcut, true);
+    return () => window.removeEventListener('keydown', forwardNativeToolShortcut, true);
+  }, [mode]);
 
   return (
     <div className={`static-overlay-runtime is-${mode}`}>

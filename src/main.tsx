@@ -43,8 +43,10 @@ import {
 import {
   PrototypeOverlay,
   createViewportChannel,
+  type OverlayMode,
 } from "./overlay";
 import { ComponentInventory, StorybookSidebar } from "./excalidraw/index.js";
+import { nativeExcalidrawToolForShortcut } from "./excalidraw/component-tool-shortcuts.js";
 import { createDeliveryModule } from "./delivery/module";
 import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
 import { useWorkspace } from "./workspace/useWorkspace";
@@ -421,6 +423,7 @@ function AnnotatorView() {
   } | null>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportPreview, setExportPreview] = useState<string | null>(null);
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>("canvas");
   const artwork = activeArtwork(workspace);
   const delivery = useMemo(
     () =>
@@ -787,6 +790,8 @@ function AnnotatorView() {
           }
           onCreateArtwork={createArtworkFromNativeImage}
           onExternalDrop={handleCanvasExternalDrop}
+          overlayMode={overlayMode}
+          onOverlayModeChange={setOverlayMode}
           renderTopRightUI={() => (
             <Suspense fallback={null}>
               <LazySidebarTrigger />
@@ -819,11 +824,15 @@ function AnnotatorView() {
               />
             </>
           )}
-          overlay={(
+          overlay={({ activateNativeTool }) => (
             <PrototypeOverlay
               components={artwork?.components || []}
               viewport={viewportChannel}
-              interactionEnabled={true}
+              mode={overlayMode}
+              onNativeToolShortcut={(key) => {
+                const tool = nativeExcalidrawToolForShortcut({ key });
+                if (tool) activateNativeTool(tool);
+              }}
               onCommit={(instanceId, patch) =>
                 updateArtwork((current) => ({
                   ...current,
