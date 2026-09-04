@@ -1,6 +1,7 @@
 import React, {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -25,6 +26,7 @@ import {
   DOCKYARD_COMPONENT_TOOL,
   ExcalidrawComponentToolPortal,
 } from "../excalidraw/ExcalidrawComponentToolPortal.js";
+import type { NativeExcalidrawTool } from "../excalidraw/component-tool-shortcuts.js";
 
 const LazyExcalidraw = lazy(async () => {
   const module = await import("@excalidraw/excalidraw");
@@ -38,6 +40,7 @@ const LazyLibraryHandler = lazy(async () => {
 
 export type ExcalidrawCanvasContext = {
   excalidrawAPI: ExcalidrawImperativeAPI | null;
+  activateNativeTool: (tool: NativeExcalidrawTool) => void;
 };
 
 export type ExcalidrawCanvasProps = {
@@ -50,7 +53,7 @@ export type ExcalidrawCanvasProps = {
   onExternalDrop: (event: React.DragEvent<HTMLDivElement>) => void;
   renderTopRightUI?: () => React.ReactElement | null;
   renderEditorUI?: (context: ExcalidrawCanvasContext) => ReactNode;
-  overlay?: ReactNode;
+  overlay?: (context: ExcalidrawCanvasContext) => ReactNode;
   overlayMode: OverlayMode;
   onOverlayModeChange: (mode: OverlayMode) => void;
 };
@@ -92,6 +95,19 @@ export function ExcalidrawCanvas({
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null);
   const libraryReturnUrl = useMemo(() => excalidrawLibraryReturnUrl(), []);
+  const activateNativeTool = useCallback((tool: NativeExcalidrawTool) => {
+    onOverlayModeChange("canvas");
+    if (!excalidrawAPI) return;
+    excalidrawAPI.updateScene({
+      appState: {
+        activeTool: {
+          ...excalidrawAPI.getAppState().activeTool,
+          type: tool,
+          customType: null,
+        },
+      },
+    });
+  }, [excalidrawAPI, onOverlayModeChange]);
 
   useEffect(() => {
     last.current = sceneContentSignature(scene);
@@ -287,25 +303,12 @@ export function ExcalidrawCanvas({
               }
             }}
             onCanvasToolActivate={() => onOverlayModeChange("canvas")}
-            onCanvasToolShortcut={(tool) => {
-              onOverlayModeChange("canvas");
-              if (excalidrawAPI) {
-                excalidrawAPI.updateScene({
-                  appState: {
-                    activeTool: {
-                      ...excalidrawAPI.getAppState().activeTool,
-                      type: tool,
-                      customType: null,
-                    },
-                  },
-                });
-              }
-            }}
+            onCanvasToolShortcut={activateNativeTool}
           />
-          {renderEditorUI?.({ excalidrawAPI })}
+          {renderEditorUI?.({ excalidrawAPI, activateNativeTool })}
         </LazyExcalidraw>
       </Suspense>
-      {overlay}
+      {overlay?.({ excalidrawAPI, activateNativeTool })}
       {!artwork && (
         <div className="canvas-empty-callout" aria-hidden="true">
           <ImagePlus size={26} />

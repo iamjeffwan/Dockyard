@@ -46,6 +46,7 @@ import {
   type OverlayMode,
 } from "./overlay";
 import { ComponentInventory, StorybookSidebar } from "./excalidraw/index.js";
+import { nativeExcalidrawToolForShortcut } from "./excalidraw/component-tool-shortcuts.js";
 import { createDeliveryModule } from "./delivery/module";
 import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
 import { useWorkspace } from "./workspace/useWorkspace";
@@ -823,11 +824,15 @@ function AnnotatorView() {
               />
             </>
           )}
-          overlay={(
+          overlay={({ activateNativeTool }) => (
             <PrototypeOverlay
               components={artwork?.components || []}
               viewport={viewportChannel}
               mode={overlayMode}
+              onNativeToolShortcut={(key) => {
+                const tool = nativeExcalidrawToolForShortcut({ key });
+                if (tool) activateNativeTool(tool);
+              }}
               onCommit={(instanceId, patch) =>
                 updateArtwork((current) => ({
                   ...current,

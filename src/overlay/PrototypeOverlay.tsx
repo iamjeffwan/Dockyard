@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentInstance } from "../types.js";
 import type { OverlayMode } from "./mode.js";
 import type { ViewportChannel, ViewportSnapshot } from "./viewport-channel.js";
-import { isOverlayMessage, isRuntimeReadyMessage, RuntimeCommand, RuntimeEvent, runtimeCommand } from "./runtime-protocol.js";
+import {
+  isOverlayMessage,
+  isRuntimeNativeToolShortcutMessage,
+  isRuntimeReadyMessage,
+  RuntimeCommand,
+  RuntimeEvent,
+  runtimeCommand,
+} from "./runtime-protocol.js";
 import "./styles.css";
 
 type RuntimeInstance = {
@@ -25,6 +32,7 @@ export type PrototypeOverlayProps = {
   viewport: ViewportChannel;
   mode: OverlayMode;
   onCommit: (instanceId: string, patch: Partial<ComponentInstance>) => void;
+  onNativeToolShortcut: (key: string) => void;
 };
 
 function runtimeUrl(manifestUrl: string) {
@@ -58,10 +66,11 @@ function viewportPayload(viewport: ViewportSnapshot) {
   };
 }
 
-export function PrototypeOverlay({ components, viewport, mode, onCommit }: PrototypeOverlayProps) {
+export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativeToolShortcut }: PrototypeOverlayProps) {
   const [viewportState, setViewportState] = useState(() => viewport.getSnapshot());
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const onCommitRef = useRef(onCommit);
+  const onNativeToolShortcutRef = useRef(onNativeToolShortcut);
   const staticComponents = useMemo(
     () => components.filter((item) => item.staticModule?.manifestUrl && (item.staticModule.componentKey || item.componentKey)),
     [components],
@@ -81,6 +90,10 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit }: Proto
   useEffect(() => {
     onCommitRef.current = onCommit;
   }, [onCommit]);
+
+  useEffect(() => {
+    onNativeToolShortcutRef.current = onNativeToolShortcut;
+  }, [onNativeToolShortcut]);
 
   useEffect(() => viewport.subscribe(() => setViewportState(viewport.getSnapshot())), [viewport]);
 
@@ -103,6 +116,10 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit }: Proto
       if (event.source !== frameRef.current?.contentWindow || !isOverlayMessage(event.data)) return;
       if (isRuntimeReadyMessage(event.data)) {
         sendRuntimeState();
+        return;
+      }
+      if (isRuntimeNativeToolShortcutMessage(event.data)) {
+        onNativeToolShortcutRef.current(event.data.key);
         return;
       }
       const instanceId = typeof event.data.componentId === "string" ? event.data.componentId : "";

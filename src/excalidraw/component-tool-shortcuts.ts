@@ -50,7 +50,3 @@ export function nativeExcalidrawToolForShortcut(input: ExcalidrawShortcutInput) 
   if (input.altKey || input.ctrlKey || input.metaKey || input.editable) return null;
   return nativeToolByShortcut[input.key.toLowerCase()] || null;
 }
-
-export function isNativeExcalidrawToolShortcut(input: ExcalidrawShortcutInput) {
-  return nativeExcalidrawToolForShortcut(input) !== null;
-}

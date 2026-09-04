@@ -89,7 +89,47 @@ const nativeShortcut = await evaluate(annotator, `(() => ({
 }))()`);
 assert.deepEqual(nativeShortcut, { componentChecked: false, rectangleChecked: true });
 
-await evaluate(annotator, "document.querySelector('[data-testid=toolbar-component]').click(); document.querySelector('[data-dockyard-component-tool-host]').remove(); true");
+await evaluate(annotator, "document.querySelector('[data-testid=toolbar-component]').click(); true");
+await delay(100);
+const runtimeReady = await waitFor(() => evaluate(annotator, `(() => {
+  const frame = document.querySelector('.prototype-overlay-shared iframe');
+  const className = frame?.contentDocument?.querySelector('.static-overlay-runtime')?.className || '';
+  return frame ? { className, source: frame.src } : null;
+})()`));
+assert.match(runtimeReady.className, /is-component/, `共享运行页未进入组件模式：${runtimeReady.source}`);
+await evaluate(annotator, `(() => {
+  const frame = document.querySelector('.prototype-overlay-shared iframe');
+  const target = frame.contentDocument.querySelector('button') || frame.contentDocument.body;
+  target.focus();
+  target.dispatchEvent(new frame.contentWindow.KeyboardEvent('keydown', { key: 'r', code: 'KeyR', bubbles: true }));
+  return true;
+})()`);
+await delay(100);
+const iframeShortcut = await evaluate(annotator, `(() => ({
+  componentChecked: document.querySelector('[data-testid=toolbar-component]')?.checked || false,
+  rectangleChecked: document.querySelector('[data-testid=toolbar-rectangle]')?.checked || false,
+}))()`);
+assert.deepEqual(iframeShortcut, { componentChecked: false, rectangleChecked: true });
+
+await evaluate(annotator, "document.querySelector('[data-testid=toolbar-component]').click(); true");
+await delay(100);
+await evaluate(annotator, `(() => {
+  const frame = document.querySelector('.prototype-overlay-shared iframe');
+  const input = frame.contentDocument.createElement('input');
+  frame.contentDocument.body.append(input);
+  input.focus();
+  input.dispatchEvent(new frame.contentWindow.KeyboardEvent('keydown', { key: 'r', code: 'KeyR', bubbles: true }));
+  input.remove();
+  return true;
+})()`);
+await delay(100);
+const iframeInput = await evaluate(annotator, `(() => ({
+  componentChecked: document.querySelector('[data-testid=toolbar-component]')?.checked || false,
+  rectangleChecked: document.querySelector('[data-testid=toolbar-rectangle]')?.checked || false,
+}))()`);
+assert.deepEqual(iframeInput, { componentChecked: true, rectangleChecked: false });
+
+await evaluate(annotator, "document.querySelector('[data-dockyard-component-tool-host]').remove(); true");
 await delay(100);
 const remounted = await evaluate(annotator, `(() => ({
   hosts: document.querySelectorAll('[data-dockyard-component-tool-host]').length,
