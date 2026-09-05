@@ -1,23 +1,27 @@
+import { STATIC_SOURCE_REGISTRY, resolveStaticComponent, validateStaticManifest } from './source-contract.js';
 import { postOverlayMessage } from './protocol.js';
 
-const send = (type, details = {}) => postOverlayMessage(type, details);
+let activeSourceId = '';
+const send = (type, details = {}) => postOverlayMessage(activeSourceId, type, details);
 
 let lastRequest = null;
 export async function loadStaticComponentModule(baseUrl = '.', selection = {}) {
   lastRequest = { baseUrl, selection };
+  activeSourceId = selection.sourceId;
   send('module-loading');
   let manifest;
   try {
+    const source = STATIC_SOURCE_REGISTRY.sourceById.get(selection.sourceId);
+    if (!source) throw new Error(`unknown-source: ${selection.sourceId || '(empty)'}`);
     const moduleBase = new URL(`${baseUrl}/`, document.baseURI);
     const response = await fetch(new URL('manifest.json', moduleBase), { cache: 'no-store' });
     if (!response.ok) throw new Error(`manifest request failed (${response.status})`);
     manifest = await response.json();
-    if (!manifest.name || !manifest.version || !manifest.entry || !Array.isArray(manifest.styles)) {
-      throw new Error('manifest must include name, version, entry and styles');
-    }
-    const component = selection.componentKey ? manifest.components?.find((item) => item.key === selection.componentKey) : undefined;
-    if (selection.componentKey && !component) throw new Error(`component not found: ${selection.componentKey}`);
-    if (selection.variantKey && !component?.variants?.some((item) => item.key === selection.variantKey)) throw new Error(`variant not found: ${selection.variantKey}`);
+    const manifestResult = validateStaticManifest(source, manifest);
+    if (!manifestResult.ok) throw new Error(`${manifestResult.error.code}: ${manifestResult.error.message}`);
+    const resolved = selection.componentKey ? resolveStaticComponent(STATIC_SOURCE_REGISTRY, selection) : null;
+    if (resolved && !resolved.ok) throw new Error(`${resolved.error.code}: ${resolved.error.message}`);
+    const component = resolved?.value.component;
     window.__DOCKYARD_STATIC_CONTEXT__ = { ...selection, component, manifest };
     for (const href of manifest.styles) {
       const link = document.createElement('link');
@@ -27,10 +31,10 @@ export async function loadStaticComponentModule(baseUrl = '.', selection = {}) {
       document.head.append(link);
     }
     await import(new URL(manifest.entry, moduleBase).href);
-    send('module-ready', { module: manifest.name, version: manifest.version, componentKey: selection.componentKey, variantKey: selection.variantKey, defaults: manifest.defaults });
+    send('module-ready', { module: manifest.name, moduleVersion: manifest.version, componentKey: selection.componentKey, variantKey: selection.variantKey, defaults: manifest.defaults });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    send('module-error', { module: manifest?.name ?? 'unknown', version: manifest?.version, error: message, phase: manifest ? 'entry' : 'manifest' });
+    send('module-error', { module: manifest?.name ?? 'unknown', moduleVersion: manifest?.version, error: message, phase: manifest ? 'entry' : 'manifest' });
     throw error;
   }
 }

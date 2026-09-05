@@ -714,7 +714,12 @@ function AnnotatorView() {
       loadStatus: "loading",
       sourceLibraryId: source.id,
       componentKey: definition.key,
-      staticModule: { manifestUrl: source.manifestUrl, componentKey: definition.key, version: source.version },
+      staticModule: {
+        sourceId: source.id,
+        componentKey: definition.key,
+        protocolVersion: source.protocolVersion,
+        version: source.module.version,
+      },
       categoryPath: definition.categoryPath,
       variantKey: variant?.key,
       props: variant?.props,

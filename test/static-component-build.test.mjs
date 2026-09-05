@@ -16,6 +16,7 @@ const expectedEntries = [
   'manifest.json',
   'protocol.js',
   'runtime.html',
+  'source-contract.js',
 ];
 
 function buildStaticComponents() {

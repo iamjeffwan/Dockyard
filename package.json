@@ -17,7 +17,7 @@
     "test:delivery": "node --test test/delivery-module.test.mjs",
     "test:workspace-store": "node --test test/workspace-store.test.mjs",
     "test:dev-processes": "node --test test/dev-processes.test.mjs",
-    "test:static-components": "node --test test/static-component-build.test.mjs",
+    "test:static-components": "node --test test/static-component-build.test.mjs test/static-component-registry.test.mjs",
     "verify:artwork-open": "node scripts/verify-artwork-open.mjs",
     "verify:project-picker": "node scripts/verify-project-picker.mjs",
     "verify:library-host": "node scripts/verify-library-host.mjs",
@@ -27,7 +27,7 @@
     "verify:bar-position": "node scripts/verify-bar-position.mjs",
     "verify:canvas-e2e": "pnpm run build && node scripts/verify-canvas-e2e.mjs",
     "prototype:overlay:electron": "electron prototypes/excalidraw-component-overlay/electron-main.cjs",
-    "build:static-components": "vite build --config prototypes/static-component-overlay/vite.config.mjs && node scripts/stage-static-components.mjs",
+    "build:static-components": "node scripts/generate-static-component-manifest.mjs && vite build --config prototypes/static-component-overlay/vite.config.mjs && node scripts/stage-static-components.mjs",
     "build": "pnpm run build:static-components && pnpm run generate:tokens && tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
     "typecheck": "pnpm run generate:tokens && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "start": "electron . --dockyard-prod --disable-gpu --disable-gpu-compositing"

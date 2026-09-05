@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentInstance } from "../types.js";
+import { staticComponentByKey, staticSourceById } from "../static-components/registry.js";
 import type { OverlayMode } from "./mode.js";
 import type { ViewportChannel, ViewportSnapshot } from "./viewport-channel.js";
 import {
@@ -14,6 +15,8 @@ import "./styles.css";
 
 type RuntimeInstance = {
   id: string;
+  sourceId: string;
+  protocolVersion: string;
   componentKey: string;
   variantKey?: string;
   props?: Record<string, unknown>;
@@ -35,14 +38,16 @@ export type PrototypeOverlayProps = {
   onNativeToolShortcut: (key: string) => void;
 };
 
-function runtimeUrl(manifestUrl: string) {
-  if (window.dockyard) return "dockyard-static://components/runtime.html";
-  return manifestUrl.replace(/manifest\.json(?=\?|$)/, "runtime.html");
+function runtimeUrl(sourceId: string, configuredUrl: string) {
+  const url = window.dockyard ? "dockyard-static://components/runtime.html" : configuredUrl;
+  return `${url}${url.includes("?") ? "&" : "?"}source=${encodeURIComponent(sourceId)}`;
 }
 
-function toRuntimeInstance(item: ComponentInstance): RuntimeInstance {
+function toRuntimeInstance(item: ComponentInstance, sourceId: string, protocolVersion: string): RuntimeInstance {
   return {
     id: item.instanceId,
+    sourceId,
+    protocolVersion,
     componentKey: item.staticModule?.componentKey || item.componentKey || "",
     variantKey: item.variantKey,
     props: item.props,
@@ -72,21 +77,35 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativ
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const onCommitRef = useRef(onCommit);
   const onNativeToolShortcutRef = useRef(onNativeToolShortcut);
+  const sourceId = components.find((item) => item.staticModule || item.sourceLibraryId)?.staticModule?.sourceId
+    || components.find((item) => item.staticModule || item.sourceLibraryId)?.sourceLibraryId
+    || "";
+  const sourceDefinition = staticSourceById(sourceId);
   const staticComponents = useMemo(
-    () => components.filter((item) => item.staticModule?.manifestUrl && (item.staticModule.componentKey || item.componentKey)),
-    [components],
+    () => sourceDefinition ? components.filter((item) => {
+      const itemSourceId = item.staticModule?.sourceId || item.sourceLibraryId;
+      const componentKey = item.staticModule?.componentKey || item.componentKey;
+      return itemSourceId === sourceDefinition.id && Boolean(componentKey && staticComponentByKey(componentKey, itemSourceId));
+    }) : [],
+    [components, sourceDefinition],
   );
-  const manifestUrl = staticComponents[0]?.staticModule?.manifestUrl;
-  const instances = useMemo(() => staticComponents.map(toRuntimeInstance), [staticComponents]);
-  const source = useMemo(() => manifestUrl ? runtimeUrl(manifestUrl) : "", [manifestUrl]);
+  const instances = useMemo(
+    () => sourceDefinition ? staticComponents.map((item) => toRuntimeInstance(item, sourceDefinition.id, sourceDefinition.protocolVersion)) : [],
+    [sourceDefinition, staticComponents],
+  );
+  const source = useMemo(
+    () => sourceDefinition ? runtimeUrl(sourceDefinition.id, sourceDefinition.runtimeUrl) : "",
+    [sourceDefinition],
+  );
 
   const sendRuntimeState = useCallback(() => {
     const frameWindow = frameRef.current?.contentWindow;
     if (!frameWindow) return;
-    frameWindow.postMessage(runtimeCommand(RuntimeCommand.viewport, viewportPayload(viewport.getSnapshot())), "*");
-    frameWindow.postMessage(runtimeCommand(RuntimeCommand.setMode, { mode }), "*");
-    frameWindow.postMessage(runtimeCommand(RuntimeCommand.setInstances, { instances }), "*");
-  }, [instances, mode, viewport]);
+    if (!sourceDefinition) return;
+    frameWindow.postMessage(runtimeCommand(sourceDefinition.id, RuntimeCommand.viewport, viewportPayload(viewport.getSnapshot())), "*");
+    frameWindow.postMessage(runtimeCommand(sourceDefinition.id, RuntimeCommand.setMode, { mode }), "*");
+    frameWindow.postMessage(runtimeCommand(sourceDefinition.id, RuntimeCommand.setInstances, { instances }), "*");
+  }, [instances, mode, sourceDefinition, viewport]);
 
   useEffect(() => {
     onCommitRef.current = onCommit;
@@ -100,26 +119,26 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativ
 
   useEffect(() => {
     const frameWindow = frameRef.current?.contentWindow;
-    frameWindow?.postMessage(runtimeCommand(RuntimeCommand.viewport, viewportPayload(viewportState)), "*");
-  }, [viewportState]);
+    if (sourceDefinition) frameWindow?.postMessage(runtimeCommand(sourceDefinition.id, RuntimeCommand.viewport, viewportPayload(viewportState)), "*");
+  }, [sourceDefinition, viewportState]);
 
   useEffect(() => {
     const frameWindow = frameRef.current?.contentWindow;
-    frameWindow?.postMessage(runtimeCommand(RuntimeCommand.setMode, { mode }), "*");
-  }, [mode, source]);
+    if (sourceDefinition) frameWindow?.postMessage(runtimeCommand(sourceDefinition.id, RuntimeCommand.setMode, { mode }), "*");
+  }, [mode, source, sourceDefinition]);
 
   useEffect(() => {
-    frameRef.current?.contentWindow?.postMessage(runtimeCommand(RuntimeCommand.setInstances, { instances }), "*");
-  }, [instances]);
+    if (sourceDefinition) frameRef.current?.contentWindow?.postMessage(runtimeCommand(sourceDefinition.id, RuntimeCommand.setInstances, { instances }), "*");
+  }, [instances, sourceDefinition]);
 
   useEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.source !== frameRef.current?.contentWindow || !isOverlayMessage(event.data)) return;
-      if (isRuntimeReadyMessage(event.data)) {
+      if (event.source !== frameRef.current?.contentWindow || !sourceDefinition || !isOverlayMessage(event.data, sourceDefinition.id)) return;
+      if (isRuntimeReadyMessage(event.data, sourceDefinition.id)) {
         sendRuntimeState();
         return;
       }
-      if (isRuntimeNativeToolShortcutMessage(event.data)) {
+      if (isRuntimeNativeToolShortcutMessage(event.data, sourceDefinition.id)) {
         onNativeToolShortcutRef.current(event.data.key);
         return;
       }
@@ -152,7 +171,7 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativ
     };
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
-  }, [sendRuntimeState, staticComponents]);
+  }, [sendRuntimeState, sourceDefinition, staticComponents]);
 
   if (!source) return null;
 

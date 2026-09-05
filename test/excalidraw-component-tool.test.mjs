@@ -17,8 +17,8 @@ async function loadTypeScriptModule(relativePath) {
 const { nativeExcalidrawToolForShortcut } = await loadTypeScriptModule(
   "../src/excalidraw/component-tool-shortcuts.ts",
 );
-const { isRuntimeNativeToolShortcutMessage, RuntimeEvent } = await loadTypeScriptModule(
-  "../src/overlay/runtime-protocol.ts",
+const { OVERLAY_PROTOCOL, OVERLAY_PROTOCOL_VERSION, OverlayEvent, validateProtocolMessage } = await import(
+  "../prototypes/static-component-overlay/source-contract.js"
 );
 
 test("原生画板工具快捷键会退出组件交互模式", () => {
@@ -44,18 +44,22 @@ test("快捷键解析为同一次操作中应激活的原生工具", () => {
 
 test("共享运行页只接受带快捷键内容的工具切换消息", () => {
   assert.equal(
-    isRuntimeNativeToolShortcutMessage({
-      protocol: "dockyard-overlay",
-      type: RuntimeEvent.nativeToolShortcut,
+    validateProtocolMessage({
+      protocol: OVERLAY_PROTOCOL,
+      version: OVERLAY_PROTOCOL_VERSION,
+      sourceId: "carbon-react",
+      type: OverlayEvent.nativeToolShortcut,
       key: "r",
-    }),
+    }, { sourceId: "carbon-react", direction: "runtime" }).ok,
     true,
   );
   assert.equal(
-    isRuntimeNativeToolShortcutMessage({
-      protocol: "dockyard-overlay",
-      type: RuntimeEvent.nativeToolShortcut,
-    }),
+    validateProtocolMessage({
+      protocol: OVERLAY_PROTOCOL,
+      version: OVERLAY_PROTOCOL_VERSION,
+      sourceId: "carbon-react",
+      type: OverlayEvent.nativeToolShortcut,
+    }, { sourceId: "carbon-react", direction: "runtime" }).ok,
     false,
   );
 });

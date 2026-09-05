@@ -5,7 +5,7 @@ const projectRoot = process.cwd();
 const sourceRoot = join(projectRoot, 'prototypes', 'static-component-overlay');
 const buildRoot = join(projectRoot, '.tmp', 'static-component-overlay', 'dist');
 const targetRoot = join(projectRoot, 'public', 'static-component-overlay');
-const sourceFiles = ['loader.js', 'manifest.json', 'protocol.js', 'runtime.html'];
+const sourceFiles = ['loader.js', 'manifest.json', 'protocol.js', 'runtime.html', 'source-contract.js'];
 const expectedBuildFiles = ['carbon-static-module.js', 'dockyard.css'];
 
 function listEntries(root) {

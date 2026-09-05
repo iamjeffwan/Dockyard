@@ -380,6 +380,13 @@ try {
       ),
       "真实画板没有完成渲染",
     );
+    await evaluate(target, `(() => {
+      window.__dockyardContractMessages = [];
+      addEventListener('message', (event) => {
+        if (event.data?.protocol === 'dockyard-overlay') window.__dockyardContractMessages.push(event.data);
+      });
+      return true;
+    })()`);
     return target;
   });
 
@@ -422,6 +429,26 @@ try {
       "静态组件运行页没有渲染 Button",
     );
     assert.equal(renderedId, insertedId, "运行页组件与工作区实例不一致");
+    const storedContract = await evaluate(annotator, `window.dockyard.loadWorkspace().then((workspace) => {
+      const component = workspace.artworks.find((item) => item.id === ${JSON.stringify(artworkId)})?.components?.[0];
+      return component ? { staticModule: component.staticModule, sourceLibraryId: component.sourceLibraryId } : null;
+    })`);
+    assert.deepEqual(storedContract, {
+      sourceLibraryId: "carbon-react",
+      staticModule: {
+        sourceId: "carbon-react",
+        componentKey: "carbon-button",
+        protocolVersion: "1",
+        version: "0.1.0",
+      },
+    }, "工作区没有按来源标识保存静态实例契约");
+    await frameEvaluate(annotator, `(() => {
+      window.__dockyardHostMessages = [];
+      addEventListener('message', (event) => {
+        if (event.data?.protocol === 'dockyard-overlay') window.__dockyardHostMessages.push(event.data);
+      });
+      return true;
+    })()`);
     return renderedId;
   });
 
@@ -517,6 +544,69 @@ try {
     return resized;
   });
 
+  await runStage("验证版本化消息和五个内置组件", async () => {
+    const componentKeys = ["carbon-date-picker", "carbon-checkbox", "carbon-dropdown", "carbon-toggle"];
+    for (let index = 0; index < componentKeys.length; index += 1) {
+      const componentKey = componentKeys[index];
+      const dispatched = await evaluate(annotator, `(() => {
+        const canvas = document.querySelector('.excalidraw-wrap');
+        const transfer = new DataTransfer();
+        transfer.setData('application/x-dockyard-story', JSON.stringify({
+          id: ${JSON.stringify(componentKey)},
+          title: 'contract / built-in',
+          name: ${JSON.stringify(componentKey)},
+          type: 'story',
+          sourceId: 'carbon-react',
+          storyUrl: '',
+        }));
+        const rect = canvas.getBoundingClientRect();
+        return canvas.dispatchEvent(new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.left + 120 + ${index} * 80,
+          clientY: rect.top + 120 + ${index} * 60,
+          dataTransfer: transfer,
+        }));
+      })()`);
+      assert.equal(dispatched, false, `组件投放事件没有被接收：${componentKey}`);
+      await waitFor(
+        () => evaluate(annotator, `window.dockyard.loadWorkspace().then((workspace) =>
+          workspace.artworks.find((item) => item.id === ${JSON.stringify(artworkId)})?.components?.length === ${index + 2}
+        )`),
+        `工作区没有保存组件：${componentKey}`,
+      );
+    }
+    const rendered = await waitFor(
+      () => frameEvaluate(annotator, `(() => {
+        const components = [...document.querySelectorAll('[data-component-key]')]
+          .map((item) => ({ key: item.dataset.componentKey, sourceId: item.dataset.sourceId }))
+          .sort((a, b) => a.key.localeCompare(b.key));
+        return components.length === 5 ? components : null;
+      })()`),
+      "五个内置组件没有全部渲染",
+    );
+    assert.deepEqual(rendered, [
+      "carbon-button",
+      "carbon-checkbox",
+      "carbon-date-picker",
+      "carbon-dropdown",
+      "carbon-toggle",
+    ].map((key) => ({ key, sourceId: "carbon-react" })));
+
+    const runtimeMessages = await evaluate(annotator, "window.__dockyardContractMessages");
+    assert.ok(runtimeMessages.length > 0, "没有观察到运行页消息");
+    const invalidRuntimeMessages = runtimeMessages.filter((message) => message.protocol !== "dockyard-overlay" || message.version !== "1" || message.sourceId !== "carbon-react");
+    assert.deepEqual(invalidRuntimeMessages, [], `运行页消息缺少协议版本或来源标识：${JSON.stringify(invalidRuntimeMessages)}`);
+    const instanceEvents = new Set(["component-click", "date-change", "checkbox-change", "dropdown-change", "toggle-change", "component-move", "component-drop", "component-bounds"]);
+    assert.ok(runtimeMessages.filter((message) => instanceEvents.has(message.type)).every((message) => typeof message.componentId === "string" && message.componentId), "实例事件缺少实例标识");
+
+    const hostMessages = await frameEvaluate(annotator, "window.__dockyardHostMessages");
+    assert.ok(hostMessages.length > 0, "没有观察到宿主命令");
+    const invalidHostMessages = hostMessages.filter((message) => message.protocol !== "dockyard-overlay" || message.version !== "1" || message.sourceId !== "carbon-react");
+    assert.deepEqual(invalidHostMessages, [], `宿主命令缺少协议版本或来源标识：${JSON.stringify(invalidHostMessages)}`);
+    assert.ok(hostMessages.filter((message) => message.type === "set-instances").every((message) => message.instances.every((instance) => typeof instance.id === "string" && instance.id)), "实例同步命令缺少实例标识");
+  });
+
   await runStage("保存并重新打开画稿", async () => {
     const saved = await evaluate(annotator, `window.dockyard.loadWorkspace()
       .then((workspace) => window.dockyard.saveWorkspace(workspace))`);
@@ -526,8 +616,8 @@ try {
     );
     assert.equal(
       persisted.artworks[0].components.length,
-      1,
-      "保存文件没有包含新建的静态组件",
+      5,
+      "保存文件没有包含五个静态组件",
     );
 
     await evaluate(application.bar, "window.dockyard.closePanel('annotator').then(() => true)");

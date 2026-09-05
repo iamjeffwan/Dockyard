@@ -140,7 +140,13 @@ export type ComponentInstance = Candidate & {
   categoryPath?: string[];
   variantKey?: string;
   props?: Record<string, unknown>;
-  staticModule?: { manifestUrl: string; componentKey: string; version?: string };
+  staticModule?: {
+    sourceId: string;
+    componentKey: string;
+    protocolVersion: string;
+    manifestUrl?: string;
+    version?: string;
+  };
   boundsSource?: "image" | "story-dom" | "electron-web-frame-main" | "fallback";
   boundsCacheKey?: string;
   loadStatus?: "loading" | "ready" | "unavailable";
