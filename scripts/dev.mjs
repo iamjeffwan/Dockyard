@@ -85,7 +85,7 @@ if (await portOpen()) {
     await waitForPort();
     const electronEnv = { ...process.env, ELECTRON_LOG_FILE: join(logRoot, 'chromium.log') };
     delete electronEnv.ELECTRON_ENABLE_LOGGING;
-    electron = spawn(electronBin, ['.', '--disable-gpu', '--disable-gpu-compositing', '--no-sandbox', '--enable-logging=file', `--log-file=${join(logRoot, 'chromium.log')}`], { cwd: root, stdio: ['ignore', 'inherit', 'pipe'], windowsHide: false, shell: false, env: electronEnv });
+    electron = spawn(electronBin, ['.', '--disable-gpu', '--disable-gpu-compositing', '--enable-logging=file', `--log-file=${join(logRoot, 'chromium.log')}`], { cwd: root, stdio: ['ignore', 'inherit', 'pipe'], windowsHide: false, shell: false, env: electronEnv });
     const electronStderr = createWriteStream(join(logRoot, 'electron-stderr.raw'));
     electron.stderr?.pipe(electronStderr);
     electron.once('close', () => electronStderr.end());

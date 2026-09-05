@@ -1,35 +1,37 @@
-export const OVERLAY_PROTOCOL = "dockyard-overlay";
-export const OVERLAY_PROTOCOL_VERSION = "1";
+import {
+  HostCommand as SharedHostCommand,
+  OVERLAY_PROTOCOL,
+  OVERLAY_PROTOCOL_VERSION,
+  OverlayEvent,
+  createProtocolMessage,
+  validateProtocolMessage,
+} from "../../prototypes/static-component-overlay/source-contract.js";
 
-export const RuntimeEvent = {
-  moduleReady: "module-ready",
-  nativeToolShortcut: "native-tool-shortcut",
-  componentBounds: "component-bounds",
-  componentDrop: "component-drop",
-} as const;
+export { OVERLAY_PROTOCOL, OVERLAY_PROTOCOL_VERSION };
+export const RuntimeEvent = OverlayEvent;
+export const RuntimeCommand = SharedHostCommand;
 
-export const RuntimeCommand = {
-  viewport: "viewport",
-  setMode: "set-mode",
-  setInstances: "set-instances",
-} as const;
-
-export function isOverlayMessage(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && (value as Record<string, unknown>).protocol === OVERLAY_PROTOCOL);
+export function validateRuntimeMessage(value: unknown, sourceId: string) {
+  return validateProtocolMessage(value, { sourceId, direction: "runtime" });
 }
 
-export function isRuntimeReadyMessage(value: unknown) {
-  return isOverlayMessage(value) && value.type === RuntimeEvent.moduleReady;
+export function isOverlayMessage(value: unknown, sourceId: string): value is Record<string, unknown> {
+  return validateRuntimeMessage(value, sourceId).ok;
+}
+
+export function isRuntimeReadyMessage(value: unknown, sourceId: string) {
+  return isOverlayMessage(value, sourceId) && value.type === RuntimeEvent.moduleReady;
 }
 
 export function isRuntimeNativeToolShortcutMessage(
   value: unknown,
+  sourceId: string,
 ): value is Record<string, unknown> & { key: string } {
-  return isOverlayMessage(value)
+  return isOverlayMessage(value, sourceId)
     && value.type === RuntimeEvent.nativeToolShortcut
     && typeof value.key === "string";
 }
 
-export function runtimeCommand(type: string, payload: Record<string, unknown> = {}) {
-  return { protocol: OVERLAY_PROTOCOL, version: OVERLAY_PROTOCOL_VERSION, type, ...payload };
+export function runtimeCommand(sourceId: string, type: string, payload: Record<string, unknown> = {}) {
+  return createProtocolMessage(sourceId, type, payload);
 }

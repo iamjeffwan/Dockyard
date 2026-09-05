@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1",
-  "sourceId": "carbon-react",
-  "name": "carbon-static-module",
+  "sourceId": "fixture-recovering",
+  "name": "fixture-recovering-module",
   "version": "0.1.0",
   "protocolVersion": "1",
-  "trustLevel": "bundled",
+  "trustLevel": "test",
   "entry": "./dist/carbon-static-module.js",
   "styles": [
     "./dist/dockyard.css"

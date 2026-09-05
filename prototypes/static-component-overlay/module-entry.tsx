@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { Button, Checkbox, DatePicker, DatePickerInput, Dropdown, Toggle } from '@carbon/react';
 import '../../src/carbon.scss';
 import './module-runtime.css';
-import { HostCommand, OverlayEvent, postOverlayMessage, rectOf } from './protocol.js';
+import { BUILTIN_STATIC_SOURCES, resolveStaticComponent, staticSourceRegistry } from './source-contract.js';
+import { HostCommand, OverlayEvent, postOverlayMessage, rectOf, validateProtocolMessage } from './protocol.js';
 import {
   beginTransformSession,
   updateTransformSession,
@@ -16,6 +17,8 @@ type OverlayMode = 'canvas' | 'component';
 type Viewport = { scrollX: number; scrollY: number; zoom: number };
 type StaticInstance = {
   id: string;
+  sourceId: string;
+  protocolVersion: string;
   componentKey: string;
   x?: number;
   y?: number;
@@ -28,6 +31,8 @@ type StaticInstance = {
   variantKey?: string;
   props?: Record<string, unknown>;
 };
+const SOURCE_ID = new URLSearchParams(location.search).get('source') || BUILTIN_STATIC_SOURCES[0].id;
+const SOURCE_REGISTRY = staticSourceRegistry(new URLSearchParams(location.search).get('fixtures') === '1');
 const isEditableTarget = (target: EventTarget | null) => target instanceof HTMLElement
   && (target.isContentEditable || Boolean(target.closest('input, textarea, select')));
 
@@ -37,22 +42,37 @@ const readInstances = (): StaticInstance[] => {
   if (raw) {
     try { return JSON.parse(raw) as StaticInstance[]; } catch { return []; }
   }
-  return [{ id: 'prototype', componentKey: params.get('component') || 'carbon-button', x: 40, y: 40 }];
+  return [{ id: 'prototype', sourceId: SOURCE_ID, protocolVersion: BUILTIN_STATIC_SOURCES[0].protocolVersion, componentKey: params.get('component') || 'carbon-button', x: 40, y: 40 }];
 };
 
 const send = (type: string, componentId: string, element: HTMLElement | null, extra: Record<string, unknown> = {}) => {
-  postOverlayMessage(type, { componentId, rect: element ? rectOf(element) : undefined, ...extra });
+  postOverlayMessage(SOURCE_ID, type, { componentId, rect: element ? rectOf(element) : undefined, ...extra });
 };
+
+const acceptInstances = (values: StaticInstance[]) => values.filter((instance) => {
+  const resolved = resolveStaticComponent(SOURCE_REGISTRY, instance);
+  if (instance.sourceId === SOURCE_ID && resolved.ok) return true;
+  const error = instance.sourceId !== SOURCE_ID
+    ? { code: 'source-mismatch', message: `实例来源不匹配：${instance.sourceId || '(empty)'}` }
+    : resolved.error;
+  postOverlayMessage(SOURCE_ID, OverlayEvent.moduleError, { componentId: instance.id, phase: 'contract', error: `${error.code}: ${error.message}` });
+  return false;
+});
 
 function Demo() {
   const [mode, setMode] = useState<OverlayMode>('canvas');
   const [viewport, setViewport] = useState<Viewport>({ scrollX: 0, scrollY: 0, zoom: 1 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [instances, setInstances] = useState(readInstances);
+  const [instances, setInstances] = useState(() => acceptInstances(readInstances()));
 
   useEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.source !== window.parent || event.data?.protocol !== 'dockyard-overlay') return;
+      if (event.source !== window.parent) return;
+      const validation = validateProtocolMessage(event.data, { sourceId: SOURCE_ID, direction: 'host' });
+      if (!validation.ok) {
+        postOverlayMessage(SOURCE_ID, OverlayEvent.moduleError, { phase: 'contract', error: `${validation.error.code}: ${validation.error.message}` });
+        return;
+      }
       if (event.data.type === HostCommand.setMode) {
         setMode(event.data.mode === 'component' ? 'component' : 'canvas');
         if (event.data.mode !== 'component') setSelectedId(null);
@@ -65,11 +85,11 @@ function Demo() {
         });
       }
       if (event.data.type === HostCommand.setInstances && Array.isArray(event.data.instances)) {
-        setInstances(event.data.instances as StaticInstance[]);
+        setInstances(acceptInstances(event.data.instances as StaticInstance[]));
       }
     };
     window.addEventListener('message', receive);
-    postOverlayMessage(OverlayEvent.moduleReady, { module: 'carbon-static-module', version: '0.1.0' });
+    postOverlayMessage(SOURCE_ID, OverlayEvent.moduleReady, { module: 'carbon-static-module', moduleVersion: '0.1.0' });
     return () => window.removeEventListener('message', receive);
   }, []);
 
@@ -77,10 +97,27 @@ function Demo() {
     if (mode !== 'component') return;
     const forwardNativeToolShortcut = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
-      postOverlayMessage(OverlayEvent.nativeToolShortcut, { key: event.key });
+      postOverlayMessage(SOURCE_ID, OverlayEvent.nativeToolShortcut, { key: event.key });
     };
     window.addEventListener('keydown', forwardNativeToolShortcut, true);
     return () => window.removeEventListener('keydown', forwardNativeToolShortcut, true);
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'component') return;
+    const reportPointer = (event: PointerEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const interactive = Boolean(target && target !== document.body
+        && !target.classList.contains('static-overlay-stage')
+        && !target.classList.contains('static-overlay-runtime'));
+      postOverlayMessage(SOURCE_ID, OverlayEvent.pointerPosition, {
+        x: event.clientX,
+        y: event.clientY,
+        interactive,
+      });
+    };
+    window.addEventListener('pointermove', reportPointer, true);
+    return () => window.removeEventListener('pointermove', reportPointer, true);
   }, [mode]);
 
   return (
@@ -196,7 +233,7 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
 
   useEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (event.source !== window.parent || event.data?.protocol !== 'dockyard-overlay' || event.data.type !== HostCommand.measure) return;
+      if (event.source !== window.parent || !validateProtocolMessage(event.data, { sourceId: SOURCE_ID, direction: 'host' }).ok || event.data.type !== HostCommand.measure) return;
       send(OverlayEvent.componentBounds, instance.id, surfaceRef.current, { naturalWidth: natural.width, naturalHeight: natural.height });
     };
     window.addEventListener('message', receive);
@@ -252,15 +289,19 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
     : instance.componentKey === 'carbon-checkbox'
       ? <Checkbox id={`checkbox-${instance.id}`} labelText="Checkbox" checked={checked} onChange={(_, data) => { setChecked(data.checked); send('checkbox-change', instance.id, surfaceRef.current, { ...common, checked: data.checked }); }} />
       : instance.componentKey === 'carbon-dropdown'
-        ? <Dropdown id={`dropdown-${instance.id}`} titleText="Dropdown" label="Choose an option" items={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }]} selectedItem={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }].find((item) => item.id === choice)} onChange={({ selectedItem }) => { if (selectedItem) { setChoice(selectedItem.id); send('dropdown-change', instance.id, surfaceRef.current, { ...common, choice: selectedItem.id }); } }} />
+        ? <Dropdown id={`dropdown-${instance.id}`} titleText="Dropdown" label="Choose an option" items={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }]} itemToString={(item) => item?.text || ''} selectedItem={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }].find((item) => item.id === choice)} onChange={({ selectedItem }) => { if (selectedItem) { setChoice(selectedItem.id); send('dropdown-change', instance.id, surfaceRef.current, { ...common, choice: selectedItem.id }); } }} />
         : instance.componentKey === 'carbon-toggle'
           ? <Toggle id={`toggle-${instance.id}`} labelText="Toggle" toggled={toggled} onToggle={(next) => { setToggled(next); send('toggle-change', instance.id, surfaceRef.current, { ...common, toggled: next }); }} />
-          : <Button kind={(instance.props?.kind || (instance.variantKey === 'danger' ? 'danger' : 'primary')) as 'primary'} onClick={(event) => { const next = clicks + 1; setClicks(next); send(OverlayEvent.componentClick, instance.id, event.currentTarget, { ...common, clicks: next }); }}>Carbon Button ({clicks})</Button>;
+          : instance.componentKey === 'carbon-button'
+            ? <Button kind={(instance.props?.kind || (instance.variantKey === 'danger' ? 'danger' : 'primary')) as 'primary'} onClick={(event) => { const next = clicks + 1; setClicks(next); send(OverlayEvent.componentClick, instance.id, event.currentTarget, { ...common, clicks: next }); }}>Carbon Button ({clicks})</Button>
+            : null;
 
   return (
     <div
       ref={surfaceRef}
       data-component-id={instance.id}
+      data-component-key={instance.componentKey}
+      data-source-id={instance.sourceId}
       className={`component-surface${selected ? ' is-selected' : ''}`}
       style={{ width, height, transform: `translate3d(${committedGeometry.x}px, ${committedGeometry.y}px, 0) rotate(${committedGeometry.rotation}rad)` }}
       onPointerDownCapture={() => { if (mode === 'component') onSelect(); }}

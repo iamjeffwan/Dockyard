@@ -1,5 +1,5 @@
 import electron from "electron";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { get as httpsGet } from "node:https";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -19,7 +19,12 @@ import {
   validateCodexCliConfig,
 } from "./codex-cli-model.js";
 import { failedRecognition, normalizeRecognitionOutput, recognitionInvocationId, recognitionSchema, type ModelRecognitionResult } from "./model-recognition.js";
-import { classifyWindowOpen } from "./external-navigation.js";
+import {
+  classifyWindowOpen,
+  isAllowedAppNavigation,
+  isAllowedLibraryNavigation,
+  isTrustedIpcSender,
+} from "./external-navigation.js";
 import {
   atomicWriteJson as atomicJson,
   readJsonFile as readJson,
@@ -32,11 +37,12 @@ import {
   loggerDirectory,
   writeLog,
 } from "./logger.js";
+import { BAR_SIZE, resolveBarPosition } from "./window-position.js";
 import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const { app, BrowserWindow, dialog, ipcMain, screen, shell, webFrameMain } = electron;
+const { app, BrowserWindow, dialog, ipcMain, protocol, screen, session, shell, webFrameMain } = electron;
 type BrowserWindow = Electron.BrowserWindow;
 
 const execFileAsync = promisify(execFile);
@@ -54,8 +60,20 @@ const workspaceDataRoot =
 app.setName("Dockyard");
 app.setPath(
   "userData",
-  join(nativeAppDataRoot, "Dockyard", app.isPackaged ? "runtime" : "runtime-dev"),
+  process.env.DOCKYARD_USER_DATA_DIR ||
+    join(nativeAppDataRoot, "Dockyard", app.isPackaged ? "runtime" : "runtime-dev"),
 );
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "dockyard-static",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 if (process.platform === "win32" && process.env.DOCKYARD_DISABLE_GPU !== "0") {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch("disable-gpu");
@@ -651,15 +669,17 @@ function rendererUrl(view: "bar" | View) {
   return (
     process.env.VITE_DEV_SERVER_URL ||
     (dev ? "http://localhost:5173" : null) ||
-    `file://${join(__dirname, "../../dist/index.html")}`
+    pathToFileURL(join(__dirname, "../../dist/index.html")).toString()
   );
 }
 function loadView(window: BrowserWindow, view: "bar" | View) {
   const url = rendererUrl(view);
-  if (url.startsWith("http")) window.loadURL(`${url}?view=${view}`);
+  const search = new URLSearchParams({ view });
+  if (process.env.DOCKYARD_STATIC_FIXTURES === "1") search.set("staticFixtures", "1");
+  if (url.startsWith("http")) window.loadURL(`${url}?${search}`);
   else
     window.loadFile(join(__dirname, "../../dist/index.html"), {
-      search: `view=${view}`,
+      search: search.toString(),
     });
 }
 function forwardLibraryReturn(url: string) {
@@ -672,12 +692,19 @@ function forwardLibraryReturn(url: string) {
   annotator.show();
   annotator.focus();
 }
-function configureWindowNavigation(window: BrowserWindow) {
+function configureWindowNavigation(
+  window: BrowserWindow,
+  scope: "app" | "library" = "app",
+) {
   window.webContents.on("will-navigate", (event, url) => {
-    if (classifyWindowOpen(url, rendererUrl("annotator")) !== "library-return")
-      return;
+    const allowed = scope === "app"
+      ? isAllowedAppNavigation(url, rendererUrl("annotator"))
+      : isAllowedLibraryNavigation(url);
+    if (allowed) return;
     event.preventDefault();
-    setImmediate(() => forwardLibraryReturn(url));
+    const kind = classifyWindowOpen(url, rendererUrl("annotator"));
+    if (kind === "library-return") setImmediate(() => forwardLibraryReturn(url));
+    else if (kind === "external") void shell.openExternal(url);
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
     const kind = classifyWindowOpen(url, rendererUrl("annotator"));
@@ -695,7 +722,9 @@ function configureWindowNavigation(window: BrowserWindow) {
             preload: undefined,
             contextIsolation: true,
             nodeIntegration: false,
+            nodeIntegrationInSubFrames: false,
             sandbox: true,
+            webSecurity: true,
           },
         },
       };
@@ -704,7 +733,7 @@ function configureWindowNavigation(window: BrowserWindow) {
     return { action: "deny" };
   });
   window.webContents.on("did-create-window", (child) => {
-    configureWindowNavigation(child);
+    configureWindowNavigation(child, "library");
     if (process.platform === "win32") child.setMenuBarVisibility(false);
   });
 }
@@ -716,17 +745,16 @@ function broadcast() {
 function createBarWindow() {
   const workArea = screen.getPrimaryDisplay().workArea;
   const saved = workspace?.windowState?.bar;
-  const barWidth = 452;
-  const barHeight = 64;
-  const barX = Math.min(
-    saved?.x ?? workArea.x + workArea.width - barWidth - 24,
-    workArea.x + workArea.width - barWidth,
-  );
+  const position = resolveBarPosition({
+    saved,
+    primaryWorkArea: workArea,
+    workAreas: screen.getAllDisplays().map((display) => display.workArea),
+  });
   barWindow = new BrowserWindow({
-    width: barWidth,
-    height: barHeight,
-    x: barX,
-    y: saved?.y ?? workArea.y + workArea.height - 96,
+    width: BAR_SIZE.width,
+    height: BAR_SIZE.height,
+    x: position.x,
+    y: position.y,
     frame: false,
     transparent: true,
     resizable: false,
@@ -738,13 +766,16 @@ function createBarWindow() {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
+      sandbox: true,
+      webSecurity: true,
     },
   });
   configureWindowNavigation(barWindow);
   barWindow.setAlwaysOnTop(true, "floating");
   loadView(barWindow, "bar");
   barWindow.once("ready-to-show", () => barWindow?.show());
-  barWindow.on("moved", () => {
+  barWindow.on("move", () => {
     if (workspace && barWindow) {
       const [x, y] = barWindow.getPosition();
       workspace.windowState = { ...workspace.windowState, bar: { x, y } };
@@ -784,6 +815,9 @@ function openPanel(view: View) {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
+      sandbox: true,
+      webSecurity: true,
     },
   });
   configureWindowNavigation(panel);
@@ -1537,10 +1571,107 @@ async function runCodex(payload: {
     };
   }
 }
+function staticComponentsRoot() {
+  return rendererUrl("annotator").startsWith("file:")
+    ? join(__dirname, "../../dist/static-component-overlay")
+    : join(process.cwd(), "public/static-component-overlay");
+}
+function staticComponentResponse(requestUrl: string) {
+  const request = new URL(requestUrl);
+  if (request.host !== "components")
+    return new Response("Not found", { status: 404 });
+  const root = resolve(staticComponentsRoot());
+  const relativePath = decodeURIComponent(request.pathname).replace(/^\/+/, "");
+  const target = resolve(root, relativePath);
+  if (target !== root && !target.startsWith(`${root}\\`) && !target.startsWith(`${root}/`))
+    return new Response("Forbidden", { status: 403 });
+  if (!existsSync(target) || !statSync(target).isFile())
+    return new Response("Not found", { status: 404 });
+  const extension = extname(target).toLowerCase();
+  const contentType = extension === ".html"
+    ? "text/html; charset=utf-8"
+    : extension === ".js"
+      ? "text/javascript; charset=utf-8"
+      : extension === ".json"
+        ? "application/json; charset=utf-8"
+        : extension === ".css"
+          ? "text/css; charset=utf-8"
+          : "application/octet-stream";
+  return new Response(readFileSync(target), {
+    headers: {
+      "Content-Type": contentType,
+      "Access-Control-Allow-Origin": "*",
+      "Cross-Origin-Resource-Policy": "cross-origin",
+    },
+  });
+}
+
+function isPrivilegedWindow(window: BrowserWindow | null) {
+  return Boolean(
+    window &&
+    (window === barWindow || [...panelWindows.values()].includes(window)),
+  );
+}
+
+function assertTrustedIpcEvent(
+  event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
+) {
+  const senderFrame = event.senderFrame;
+  const trusted = Boolean(senderFrame) && isTrustedIpcSender({
+    senderUrl: senderFrame?.url || "",
+    rendererBaseUrl: rendererUrl("annotator"),
+    isMainFrame: senderFrame === event.sender.mainFrame,
+    belongsToPrivilegedWindow: isPrivilegedWindow(
+      BrowserWindow.fromWebContents(event.sender),
+    ),
+  });
+  if (!trusted) throw new Error("拒绝来自非受信页面的高权限消息");
+}
+
+function trustedHandle(
+  channel: string,
+  listener: (
+    event: Electron.IpcMainInvokeEvent,
+    ...args: any[]
+  ) => any,
+) {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertTrustedIpcEvent(event);
+    return listener(event, ...args);
+  });
+}
+
+function trustedOn(
+  channel: string,
+  listener: (event: Electron.IpcMainEvent, ...args: any[]) => void,
+) {
+  ipcMain.on(channel, (event, ...args) => {
+    try {
+      assertTrustedIpcEvent(event);
+      listener(event, ...args);
+    } catch (error) {
+      writeLog("warn", "ipc.untrusted_sender", {
+        channel,
+        senderUrl: event.senderFrame?.url || "",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+}
+
 app.whenReady().then(() => {
   initLogger();
   installProcessErrorHandlers();
+  void protocol.handle("dockyard-static", (request) =>
+    staticComponentResponse(request.url),
+  );
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false),
+  );
+  session.defaultSession.on("will-download", (event) => event.preventDefault());
   app.on("web-contents-created", (_event, contents) => {
+    contents.setWindowOpenHandler(() => ({ action: "deny" }));
     contents.on("did-frame-finish-load", (_frameEvent, isMainFrame, frameProcessId, frameRoutingId) => {
       rememberFrame(contents, frameProcessId, frameRoutingId);
       writeLog("debug", "storybook.frame.finish_load", {
@@ -1576,7 +1707,7 @@ app.whenReady().then(() => {
     });
   });
   workspace = loadWorkspace();
-  ipcMain.handle("workspace:save", (_event, next: any) => {
+  trustedHandle("workspace:save", (_event, next: any) => {
     try {
       const result = saveWorkspace({ ...next, updatedAt: now() });
       if (result.ok) broadcast();
@@ -1588,38 +1719,38 @@ app.whenReady().then(() => {
       };
     }
   });
-  ipcMain.handle("workspace:load", () => workspace);
-  ipcMain.on("diagnostics:log", (_event, payload: { level?: string; event?: string; context?: Record<string, unknown> }) => {
+  trustedHandle("workspace:load", () => workspace);
+  trustedOn("diagnostics:log", (_event, payload: { level?: string; event?: string; context?: Record<string, unknown> }) => {
     if (!payload || !/^(debug|info|warn|error)$/.test(String(payload.level)) || !/^[a-z0-9_.]+$/.test(String(payload.event))) return;
     writeLog(payload.level as "debug" | "info" | "warn" | "error", String(payload.event), { ...payload.context, process: "renderer" });
   });
-  ipcMain.handle("storybook:sources", () => storybookSources);
-  ipcMain.handle("storybook:catalog", (_event, sourceId: string) =>
+  trustedHandle("storybook:sources", () => storybookSources);
+  trustedHandle("storybook:catalog", (_event, sourceId: string) =>
     loadStorybookCatalog(sourceId),
   );
-  ipcMain.handle("storybook:check", (_event, sourceId: string) =>
+  trustedHandle("storybook:check", (_event, sourceId: string) =>
     checkStorybookSource(sourceId),
   );
-  ipcMain.handle("storybook:measure-frame", (event, storyUrl: string) =>
+  trustedHandle("storybook:measure-frame", (event, storyUrl: string) =>
     measureStoryFrame(event.sender, storyUrl),
   );
-  ipcMain.handle("artwork:capture-viewport", async (event) => {
+  trustedHandle("artwork:capture-viewport", async (event) => {
     const image = await event.sender.capturePage();
     return image.toDataURL();
   });
-  ipcMain.on("design:sync", (_event, next: any) => {
+  trustedOn("design:sync", (_event, next: any) => {
     workspace = next;
     broadcast();
   });
-  ipcMain.handle("codex:storybook-search", (event, payload) =>
+  trustedHandle("codex:storybook-search", (event, payload) =>
     runStorybookSearch(payload, (trace) => event.sender.send("codex:trace", trace)),
   );
-  ipcMain.handle("model:recognize", (_event, payload: { imageDataUrl: string; prompt: string }) =>
+  trustedHandle("model:recognize", (_event, payload: { imageDataUrl: string; prompt: string }) =>
     runModelRecognition(payload),
   );
-  ipcMain.handle("diagnostics:logs-open", () => shell.openPath(loggerDirectory()));
-  ipcMain.handle("artwork:complete", (_event, payload) => completeArtwork(payload));
-  ipcMain.handle("project:pick", async () => {
+  trustedHandle("diagnostics:logs-open", () => shell.openPath(loggerDirectory()));
+  trustedHandle("artwork:complete", (_event, payload) => completeArtwork(payload));
+  trustedHandle("project:pick", async () => {
     const result = await dialog.showOpenDialog({
       properties: ["openDirectory"],
     });
@@ -1627,23 +1758,23 @@ app.whenReady().then(() => {
     const path = result.filePaths[0];
     return { path, name: basename(path) };
   });
-  ipcMain.handle("project:status", () => projectStatus());
-  ipcMain.handle("project:open", (_event, path: string) => openProject(path));
-  ipcMain.handle(
+  trustedHandle("project:status", () => projectStatus());
+  trustedHandle("project:open", (_event, path: string) => openProject(path));
+  trustedHandle(
     "project:relink",
     (_event, previousPath: string, path: string) =>
       relinkProject(previousPath, path),
   );
-  ipcMain.handle("project:create-workspace", (_event, path: string) =>
+  trustedHandle("project:create-workspace", (_event, path: string) =>
     createProjectWorkspace(path),
   );
-  ipcMain.handle("panel:open", (_event, view: View) => openPanel(view));
-  ipcMain.handle("panel:close", (_event, view: View) => {
+  trustedHandle("panel:open", (_event, view: View) => openPanel(view));
+  trustedHandle("panel:close", (_event, view: View) => {
     const panel = panelWindows.get(view);
     if (panel && !panel.isDestroyed()) panel.close();
   });
-  ipcMain.handle("bar:show", () => barWindow?.show());
-  ipcMain.handle("bar:hide", () => barWindow?.hide());
+  trustedHandle("bar:show", () => barWindow?.show());
+  trustedHandle("bar:hide", () => barWindow?.hide());
   createBarWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createBarWindow();

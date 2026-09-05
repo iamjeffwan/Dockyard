@@ -367,7 +367,7 @@ export function StorybookSidebar({
             </div>
             <div className="storybook-preview">
               <h3>{selection?.storyName || "Story 预览"}</h3>
-              <div className="storybook-preview-frame">{selection?.storyUrl ? <iframe title={selection.storyName || selection.storyId} src={selection.storyUrl} /> : <span>选择一个 Story 查看预览</span>}</div>
+              <div className="storybook-preview-frame">{selection?.storyUrl ? <iframe title={selection.storyName || selection.storyId} src={selection.storyUrl} sandbox="allow-scripts allow-forms allow-same-origin" /> : <span>选择一个 Story 查看预览</span>}</div>
               <div className="storybook-preview-meta"><span>{selectedSource?.name || "未选择来源"}</span><span>{selectedStory?.title || ""}</span></div>
             </div>
           </div>

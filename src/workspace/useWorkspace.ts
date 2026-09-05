@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import type { Workspace } from "../types";
-import { createWorkspaceStore } from "./store";
+import type { Workspace } from "../types.js";
+import { createWorkspaceStore } from "./store.js";
 
 const emptyWorkspace = (): Workspace => ({
   version: 3,
@@ -49,15 +49,16 @@ export function useWorkspace() {
     (producer: (current: Workspace) => Workspace, record = true) => {
       const current = store.getSnapshot();
       if (!current.ready) return Promise.resolve({ ok: false, error: "工作区尚未加载完成" });
-      if (record) {
-        historyRef.current = [...historyRef.current.slice(-39), current.workspace];
-        futureRef.current = [];
-      }
       return store.dispatch({
         type: "update-workspace",
-        update: producer,
+        update: (latest) => {
+          if (record) {
+            historyRef.current = [...historyRef.current.slice(-39), latest];
+            futureRef.current = [];
+          }
+          return producer(latest);
+        },
         persist: record,
-        expectedRevision: current.revision,
       });
     },
     [],

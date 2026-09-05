@@ -8,3 +8,23 @@
 .prototype-overlay-shared iframe { display: block; pointer-events: none; }
 .prototype-overlay-shared.is-active,
 .prototype-overlay-shared.is-active iframe { pointer-events: auto; }
+
+.prototype-overlay-error {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #da1e28;
+  background: #fff1f1;
+  color: #161616;
+  font: 12px/1.3 sans-serif;
+  transform-origin: center;
+  pointer-events: auto;
+}
+
+.prototype-overlay-error span { overflow-wrap: anywhere; }
+.prototype-overlay-error button { align-self: flex-start; }
