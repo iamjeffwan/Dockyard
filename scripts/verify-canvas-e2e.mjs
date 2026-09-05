@@ -664,6 +664,28 @@ try {
     assert.ok(hostMessages.filter((message) => message.type === "set-instances").every((message) => message.instances.every((instance) => typeof instance.id === "string" && instance.id)), "实例同步命令缺少实例标识");
   });
 
+  await runStage("补验五组件交互与工具快捷键", async () => {
+    const result = await frameEvaluate(annotator, `(() => {
+      const checkbox = document.querySelector('[data-component-key="carbon-checkbox"] input');
+      const toggle = document.querySelector('[data-component-key="carbon-toggle"] [role="switch"]');
+      checkbox.click(); toggle.click();
+      return new Promise(resolve => setTimeout(() => resolve({checkbox: checkbox.checked, toggle: toggle.getAttribute("aria-checked") === "true"}), 100));
+    })()`);
+    assert.deepEqual(result, {checkbox: true, toggle: true});
+    await frameEvaluate(annotator, `document.querySelector('[data-component-key="carbon-date-picker"] input').click(); true`);
+    await waitFor(() => frameEvaluate(annotator, `Boolean(document.querySelector('.flatpickr-calendar.open'))`), "日期面板没有打开");
+    await frameEvaluate(annotator, `(() => {
+      const day = [...document.querySelectorAll('.flatpickr-calendar.open .flatpickr-day')]
+        .find(node => node.textContent === '15' && !node.classList.contains('prevMonthDay') && !node.classList.contains('nextMonthDay'));
+      if (!day) throw new Error('没有找到可选日期');
+      day.click(); return true;
+    })()`);
+    await waitFor(() => evaluate(annotator, `window.__dockyardContractMessages.some(message => message.type === 'date-change' && message.date === '2026-09-15')`), "日期选择没有提交有效日期");
+    await frameEvaluate(annotator, `document.activeElement?.blur(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', code: 'KeyR', bubbles: true })); true`);
+    await waitFor(() => evaluate(annotator, `document.querySelector('[data-testid=toolbar-rectangle]').checked && !document.querySelector('[data-testid=toolbar-component]').checked`), "运行页快捷键没有切换原生工具");
+    await evaluate(annotator, `document.querySelector('[data-testid=toolbar-component]').click(); true`);
+  });
+
   await runStage("验证两个来源使用独立且复用的运行页", async () => {
     const saved = await evaluate(annotator, `window.dockyard.loadWorkspace().then((workspace) => {
       const artwork = workspace.artworks.find((item) => item.id === ${JSON.stringify(artworkId)});

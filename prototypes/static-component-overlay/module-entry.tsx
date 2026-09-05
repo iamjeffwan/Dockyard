@@ -285,7 +285,7 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
 
   const common = { component: instance.componentKey };
   const child = instance.componentKey === 'carbon-date-picker'
-    ? <DatePicker dateFormat="Y-m-d" datePickerType="single" value={date} onChange={(event) => { const next = event.target.value; setDate(next); send('date-change', instance.id, event.target as HTMLElement, { ...common, date: next }); }}><DatePickerInput id={`date-${instance.id}`} labelText="Date Picker" placeholder="yyyy-mm-dd" /></DatePicker>
+    ? <DatePicker dateFormat="Y-m-d" datePickerType="single" value={date} onChange={(_dates: Date[], next: string) => { setDate(next); send('date-change', instance.id, surfaceRef.current, { ...common, date: next }); }}><DatePickerInput id={`date-${instance.id}`} labelText="Date Picker" placeholder="yyyy-mm-dd" /></DatePicker>
     : instance.componentKey === 'carbon-checkbox'
       ? <Checkbox id={`checkbox-${instance.id}`} labelText="Checkbox" checked={checked} onChange={(_, data) => { setChecked(data.checked); send('checkbox-change', instance.id, surfaceRef.current, { ...common, checked: data.checked }); }} />
       : instance.componentKey === 'carbon-dropdown'
