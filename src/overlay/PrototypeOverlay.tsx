@@ -36,6 +36,7 @@ export type PrototypeOverlayProps = {
 };
 
 function runtimeUrl(manifestUrl: string) {
+  if (window.dockyard) return "dockyard-static://components/runtime.html";
   return manifestUrl.replace(/manifest\.json(?=\?|$)/, "runtime.html");
 }
 
@@ -161,6 +162,7 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativ
         ref={frameRef}
         title="共享静态组件层"
         src={source}
+        sandbox="allow-scripts"
         onLoad={sendRuntimeState}
         style={{ width: "100%", height: "100%", border: 0, background: "transparent" }}
       />

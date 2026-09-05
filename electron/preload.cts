@@ -2,7 +2,7 @@ import electron from "electron";
 
 const { contextBridge, ipcRenderer } = electron;
 
-contextBridge.exposeInMainWorld("dockyard", {
+if (process.isMainFrame) contextBridge.exposeInMainWorld("dockyard", {
   saveWorkspace: (workspace: unknown) =>
     ipcRenderer.invoke("workspace:save", workspace),
   loadWorkspace: () => ipcRenderer.invoke("workspace:load"),

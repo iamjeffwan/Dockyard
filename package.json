@@ -11,6 +11,7 @@
     "generate:tokens": "node scripts/generate-tokens.mjs",
     "test:codex-cli": "tsc -p tsconfig.electron.json && node --test test/codex-cli-model.test.mjs",
     "test:library-host": "tsc -p tsconfig.electron.json && node --test test/excalidraw-library-host.test.mjs test/external-navigation.test.mjs",
+    "test:electron-security": "tsc -p tsconfig.electron.json && node --test test/external-navigation.test.mjs test/electron-security.test.mjs",
     "test:workspace": "tsc -p tsconfig.electron.json && node --test test/workspace-files.test.mjs",
     "test:delivery": "node --test test/delivery-module.test.mjs",
     "test:workspace-store": "node --test test/workspace-store.test.mjs",
@@ -21,11 +22,12 @@
     "verify:library-host": "node scripts/verify-library-host.mjs",
     "verify:component-toolbar": "node scripts/verify-component-toolbar.mjs",
     "verify:component-transforms": "node scripts/verify-component-transforms.mjs",
+    "verify:electron-security": "node scripts/verify-electron-security.mjs",
     "prototype:overlay:electron": "electron prototypes/excalidraw-component-overlay/electron-main.cjs",
     "build:static-components": "vite build --config prototypes/static-component-overlay/vite.config.mjs && node scripts/stage-static-components.mjs",
     "build": "pnpm run build:static-components && pnpm run generate:tokens && tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
     "typecheck": "pnpm run generate:tokens && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "start": "electron . --dockyard-prod --disable-gpu --disable-gpu-compositing --no-sandbox"
+    "start": "electron . --dockyard-prod --disable-gpu --disable-gpu-compositing"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
