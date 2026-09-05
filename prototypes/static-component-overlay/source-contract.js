@@ -15,6 +15,7 @@ export const OverlayEvent = Object.freeze({
   componentMove: 'component-move',
   componentDrop: 'component-drop',
   componentBounds: 'component-bounds',
+  pointerPosition: 'pointer-position',
 });
 
 export const HostCommand = Object.freeze({
@@ -85,6 +86,32 @@ export const BUILTIN_STATIC_SOURCES = Object.freeze([
   }),
 ]);
 
+const fixtureSource = (id, name) => defineStaticSource({
+  schemaVersion: STATIC_SOURCE_SCHEMA_VERSION,
+  id,
+  name,
+  manifestUrl: `./static-component-overlay/manifest.${id}.json`,
+  runtimeUrl: './static-component-overlay/runtime.html',
+  protocolVersion: OVERLAY_PROTOCOL_VERSION,
+  trustLevel: 'test',
+  testOnly: true,
+  module: {
+    name: `${id}-module`,
+    version: '0.1.0',
+    entry: './dist/carbon-static-module.js',
+    styles: ['./dist/dockyard.css'],
+  },
+  components: carbonComponents,
+});
+
+export const TEST_STATIC_SOURCES = Object.freeze([
+  fixtureSource('fixture-stable', 'Fixture Stable'),
+  defineStaticSource({
+    ...fixtureSource('fixture-recovering', 'Fixture Recovering'),
+    failureSequence: ['manifest', 'style', 'module'],
+  }),
+]);
+
 export function createStaticSourceRegistry(sources) {
   const sourceById = new Map();
   for (const source of sources) {
@@ -95,6 +122,12 @@ export function createStaticSourceRegistry(sources) {
 }
 
 export const STATIC_SOURCE_REGISTRY = createStaticSourceRegistry(BUILTIN_STATIC_SOURCES);
+
+export function staticSourceRegistry(includeTestSources = false) {
+  return includeTestSources
+    ? createStaticSourceRegistry([...BUILTIN_STATIC_SOURCES, ...TEST_STATIC_SOURCES])
+    : STATIC_SOURCE_REGISTRY;
+}
 
 export function resolveStaticComponent(registry, selection) {
   const source = registry.sourceById.get(selection?.sourceId);

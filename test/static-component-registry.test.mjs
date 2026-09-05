@@ -8,11 +8,13 @@ import {
   OVERLAY_PROTOCOL,
   OVERLAY_PROTOCOL_VERSION,
   OverlayEvent,
+  TEST_STATIC_SOURCES,
   createProtocolMessage,
   createStaticInstance,
   createStaticSourceRegistry,
   defineStaticSource,
   staticManifestForSource,
+  staticSourceRegistry,
   validateProtocolMessage,
 } from '../prototypes/static-component-overlay/source-contract.js';
 
@@ -65,6 +67,13 @@ test('测试来源与内置来源共用同一种实例模型', () => {
   assert.equal('runtimeUrl' in remote.value, false);
 });
 
+test('测试来源只在显式启用时加入注册表', () => {
+  assert.equal(staticSourceRegistry().sourceById.has('fixture-stable'), false);
+  const registry = staticSourceRegistry(true);
+  assert.equal(registry.sourceById.get('fixture-stable'), TEST_STATIC_SOURCES[0]);
+  assert.deepEqual(registry.sourceById.get('fixture-recovering').failureSequence, ['manifest', 'style', 'module']);
+});
+
 test('未知来源、组件、变体和协议版本返回明确错误', () => {
   const registry = createStaticSourceRegistry(BUILTIN_STATIC_SOURCES);
   assert.equal(createStaticInstance(registry, { sourceId: 'missing', componentKey: 'carbon-button', instanceId: 'x' }).error.code, ContractErrorCode.unknownSource);
@@ -77,6 +86,7 @@ test('跨页消息必须包含协议版本、来源和实例标识', () => {
   const base = { protocol: OVERLAY_PROTOCOL, version: OVERLAY_PROTOCOL_VERSION, sourceId: carbon.id };
   assert.equal(validateProtocolMessage({ ...base, type: OverlayEvent.moduleReady }, { sourceId: carbon.id, direction: 'runtime' }).ok, true);
   assert.equal(validateProtocolMessage({ ...base, type: OverlayEvent.componentBounds, componentId: 'instance-1' }, { sourceId: carbon.id, direction: 'runtime' }).ok, true);
+  assert.equal(validateProtocolMessage({ ...base, type: OverlayEvent.pointerPosition, x: 10, y: 20 }, { sourceId: carbon.id, direction: 'runtime' }).ok, true);
   assert.equal(validateProtocolMessage({ protocol: OVERLAY_PROTOCOL, type: OverlayEvent.moduleReady }, { sourceId: carbon.id, direction: 'runtime' }).error.code, ContractErrorCode.unsupportedProtocol);
   assert.equal(validateProtocolMessage({ ...base, type: OverlayEvent.componentBounds }, { sourceId: carbon.id, direction: 'runtime' }).error.code, ContractErrorCode.missingInstance);
   assert.equal(validateProtocolMessage({ ...base, sourceId: 'other', type: HostCommand.viewport }, { sourceId: carbon.id, direction: 'host' }).error.code, ContractErrorCode.sourceMismatch);

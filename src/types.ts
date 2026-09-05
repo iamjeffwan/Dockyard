@@ -150,6 +150,11 @@ export type ComponentInstance = Candidate & {
   boundsSource?: "image" | "story-dom" | "electron-web-frame-main" | "fallback";
   boundsCacheKey?: string;
   loadStatus?: "loading" | "ready" | "unavailable";
+  staticError?: {
+    sourceId: string;
+    phase: "manifest" | "style" | "module" | "contract" | "source";
+    reason: string;
+  };
   intrinsicWidth?: number;
   intrinsicHeight?: number;
   naturalWidth?: number;

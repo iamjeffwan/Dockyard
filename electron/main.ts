@@ -674,10 +674,12 @@ function rendererUrl(view: "bar" | View) {
 }
 function loadView(window: BrowserWindow, view: "bar" | View) {
   const url = rendererUrl(view);
-  if (url.startsWith("http")) window.loadURL(`${url}?view=${view}`);
+  const search = new URLSearchParams({ view });
+  if (process.env.DOCKYARD_STATIC_FIXTURES === "1") search.set("staticFixtures", "1");
+  if (url.startsWith("http")) window.loadURL(`${url}?${search}`);
   else
     window.loadFile(join(__dirname, "../../dist/index.html"), {
-      search: `view=${view}`,
+      search: search.toString(),
     });
 }
 function forwardLibraryReturn(url: string) {

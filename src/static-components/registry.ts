@@ -1,7 +1,7 @@
 import {
   BUILTIN_STATIC_SOURCES,
-  STATIC_SOURCE_REGISTRY,
   resolveStaticComponent,
+  staticSourceRegistry,
   type StaticComponentDefinition,
   type StaticSourceDefinition,
 } from "../../prototypes/static-component-overlay/source-contract.js";
@@ -17,13 +17,16 @@ export type StaticComponentSelection = {
 
 export const STATIC_SOURCES = [...BUILTIN_STATIC_SOURCES];
 export const STATIC_COMPONENTS = [...STATIC_SOURCES[0].components];
+const fixturesEnabled = typeof window !== "undefined"
+  && new URLSearchParams(window.location.search).get("staticFixtures") === "1";
+const runtimeSourceRegistry = staticSourceRegistry(fixturesEnabled);
 
 export function staticSourceById(id: string) {
-  return STATIC_SOURCE_REGISTRY.sourceById.get(id);
+  return runtimeSourceRegistry.sourceById.get(id);
 }
 
 export function staticComponentByKey(key: string, sourceId = STATIC_SOURCES[0].id) {
-  const result = resolveStaticComponent(STATIC_SOURCE_REGISTRY, { sourceId, componentKey: key });
+  const result = resolveStaticComponent(runtimeSourceRegistry, { sourceId, componentKey: key });
   return result.ok ? result.value.component : undefined;
 }
 

@@ -13,6 +13,8 @@ const expectedEntries = [
   'dist/carbon-static-module.js',
   'dist/dockyard.css',
   'loader.js',
+  'manifest.fixture-recovering.json',
+  'manifest.fixture-stable.json',
   'manifest.json',
   'protocol.js',
   'runtime.html',

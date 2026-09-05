@@ -149,23 +149,28 @@ async function evaluate(target, expression) {
   return result.result.value;
 }
 
-function findStaticRuntimeFrame(frameTree) {
-  if (frameTree.frame.url.startsWith("dockyard-static://components/runtime.html"))
+function hasRuntimeSource(url, sourceId) {
+  return url.startsWith("dockyard-static://components/runtime.html")
+    && new URL(url).searchParams.get("source") === sourceId;
+}
+
+function findStaticRuntimeFrame(frameTree, sourceId) {
+  if (hasRuntimeSource(frameTree.frame.url, sourceId))
     return frameTree.frame;
   for (const child of frameTree.childFrames || []) {
-    const found = findStaticRuntimeFrame(child);
+    const found = findStaticRuntimeFrame(child, sourceId);
     if (found) return found;
   }
   return null;
 }
 
-async function frameEvaluate(target, expression) {
+async function frameEvaluate(target, expression, sourceId = "carbon-react") {
   const runtimeTarget = (await application?.targets?.())?.find((item) =>
-    item.url.startsWith("dockyard-static://components/runtime.html"),
+    hasRuntimeSource(item.url, sourceId),
   );
   if (runtimeTarget) return evaluate(runtimeTarget, expression);
   const { frameTree } = await cdp(target, "Page.getFrameTree");
-  const frame = findStaticRuntimeFrame(frameTree);
+  const frame = findStaticRuntimeFrame(frameTree, sourceId);
   if (!frame) {
     const urls = (await application?.targets?.())?.map((item) => item.url) || [];
     throw new Error(`没有找到静态组件运行页：${JSON.stringify(urls)}`);
@@ -238,6 +243,7 @@ async function launch() {
         ...process.env,
         DOCKYARD_DATA_DIR: dataRoot,
         DOCKYARD_USER_DATA_DIR: userDataRoot,
+        DOCKYARD_STATIC_FIXTURES: "1",
       },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -640,6 +646,228 @@ try {
     assert.ok(hostMessages.filter((message) => message.type === "set-instances").every((message) => message.instances.every((instance) => typeof instance.id === "string" && instance.id)), "实例同步命令缺少实例标识");
   });
 
+  await runStage("验证两个来源使用独立且复用的运行页", async () => {
+    const saved = await evaluate(annotator, `window.dockyard.loadWorkspace().then((workspace) => {
+      const artwork = workspace.artworks.find((item) => item.id === ${JSON.stringify(artworkId)});
+      const fixture = (instanceId, sourceId, componentKey, x, y) => ({
+        id: componentKey,
+        name: componentKey,
+        library: sourceId,
+        previewKind: 'reference',
+        instanceId,
+        elementId: '',
+        sequence: instanceId,
+        status: 'confirmed',
+        loadStatus: 'loading',
+        sourceLibraryId: sourceId,
+        componentKey,
+        staticModule: { sourceId, componentKey, protocolVersion: '1', version: '0.1.0' },
+        x,
+        y,
+        width: componentKey === 'carbon-dropdown' ? 300 : 160,
+        height: componentKey === 'carbon-dropdown' ? 64 : 48,
+        rotation: 0,
+      });
+      artwork.components.push(
+        fixture('fixture-stable-button', 'fixture-stable', 'carbon-button', 80, 500),
+        fixture('fixture-stable-dropdown', 'fixture-stable', 'carbon-dropdown', 300, 500),
+        fixture('fixture-recovering-button', 'fixture-recovering', 'carbon-button', 650, 500),
+      );
+      return window.dockyard.saveWorkspace(workspace);
+    })`);
+    assert.equal(saved.ok, true, saved.error || "测试来源写入工作区失败");
+    const frameSources = await waitFor(
+      () => evaluate(annotator, `(() => {
+        const values = [...document.querySelectorAll('.prototype-overlay-shared iframe')]
+          .map((frame) => frame.dataset.sourceId).sort();
+        return values.length === 3 ? values : null;
+      })()`),
+      "真实画板没有按来源创建运行页",
+      3_000,
+    );
+    assert.deepEqual(frameSources, ["carbon-react", "fixture-recovering", "fixture-stable"]);
+
+    const stableInstances = await waitFor(
+      () => frameEvaluate(annotator, `(() => {
+        const values = [...document.querySelectorAll('[data-component-id]')]
+          .map((item) => ({ id: item.dataset.componentId, sourceId: item.dataset.sourceId }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        return values.length === 2 ? values : null;
+      })()`, "fixture-stable"),
+      "稳定来源没有在同一运行页渲染两个实例",
+    );
+    assert.deepEqual(stableInstances, [
+      { id: "fixture-stable-button", sourceId: "fixture-stable" },
+      { id: "fixture-stable-dropdown", sourceId: "fixture-stable" },
+    ]);
+
+    for (const sourceId of ["fixture-stable", "fixture-recovering"]) {
+      const isolated = await frameEvaluate(annotator, `(() => {
+        let parentDocumentBlocked = false;
+        try { void parent.document; } catch { parentDocumentBlocked = true; }
+        return {
+          bridge: typeof window.dockyard,
+          model: typeof window.__DOCKYARD_MODEL__,
+          parentDocumentBlocked,
+        };
+      })()`, sourceId);
+      assert.deepEqual(isolated, { bridge: "undefined", model: "undefined", parentDocumentBlocked: true }, `${sourceId} 运行页越过了沙箱边界`);
+    }
+
+    const readFailure = () => evaluate(annotator, `(() => {
+      const card = [...document.querySelectorAll('.prototype-overlay-error')]
+        .find((item) => item.dataset.componentId === 'fixture-recovering-button');
+      if (!card) return null;
+      return {
+        phase: card.dataset.errorPhase,
+        reason: card.querySelector('span')?.textContent || '',
+        width: Number.parseFloat(card.style.width),
+        height: Number.parseFloat(card.style.height),
+        canRetry: Boolean(card.querySelector('button')),
+      };
+    })()`);
+    const retry = () => evaluate(annotator, `(() => {
+      const card = [...document.querySelectorAll('.prototype-overlay-error')]
+        .find((item) => item.dataset.componentId === 'fixture-recovering-button');
+      const button = card?.querySelector('button');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    const assertStableWorks = async () => {
+      const clicks = await frameEvaluate(annotator, `(() => {
+        const button = document.querySelector('[data-component-id="fixture-stable-button"] .cds--btn');
+        if (!button) return null;
+        button.click();
+        return button.textContent;
+      })()`, "fixture-stable");
+      assert.ok(clicks?.includes("Carbon Button"), "一个来源失败时稳定来源不可用");
+    };
+
+    for (const expectedPhase of ["manifest", "style", "module"]) {
+      const failureState = await waitFor(async () => {
+        const current = await readFailure();
+        return current?.phase === expectedPhase ? current : null;
+      }, `没有显示 ${expectedPhase} 失败`);
+      assert.ok(failureState.reason, `${expectedPhase} 失败没有显示原因`);
+      assert.equal(failureState.canRetry, true, `${expectedPhase} 失败不能重试`);
+      assert.ok(failureState.width > 0 && failureState.height > 0, `${expectedPhase} 错误实例没有保留可见尺寸`);
+      await assertStableWorks();
+      assert.equal(await retry(), true, `${expectedPhase} 重试按钮不可用`);
+    }
+
+    const recovered = await waitFor(
+      () => frameEvaluate(annotator, `(() => {
+        const surface = document.querySelector('[data-component-id="fixture-recovering-button"]');
+        return surface ? { sourceId: surface.dataset.sourceId, hasButton: Boolean(surface.querySelector('.cds--btn')) } : null;
+      })()`, "fixture-recovering"),
+      "三阶段失败后重试没有恢复来源",
+    );
+    assert.deepEqual(recovered, { sourceId: "fixture-recovering", hasButton: true });
+    const recoveredState = await waitFor(
+      () => evaluate(annotator, `window.dockyard.loadWorkspace().then((workspace) => {
+        const item = workspace.artworks.find((entry) => entry.id === ${JSON.stringify(artworkId)})
+          ?.components.find((entry) => entry.instanceId === 'fixture-recovering-button');
+        return item?.loadStatus === 'ready' ? {
+          x: item.x, y: item.y, width: item.width, height: item.height,
+          hasError: Boolean(item.staticError),
+        } : null;
+      })`),
+      "恢复后的实例状态没有保存",
+    );
+    assert.deepEqual(recoveredState, { x: 650, y: 500, width: 160, height: 48, hasError: false });
+
+    const failureMessages = await evaluate(annotator, `window.__dockyardContractMessages
+      .filter((message) => message.sourceId === 'fixture-recovering' && ['module-loading', 'module-error', 'module-ready'].includes(message.type))
+      .map((message) => ({ type: message.type, phase: message.phase }))`);
+    assert.deepEqual(
+      failureMessages.filter((message) => message.type === "module-error").map((message) => message.phase),
+      ["manifest", "style", "module"],
+      "运行页没有按来源报告完整失败阶段",
+    );
+    assert.ok(failureMessages.some((message) => message.type === "module-loading"), "缺少来源加载状态");
+    assert.ok(failureMessages.some((message) => message.type === "module-ready"), "缺少来源恢复状态");
+  });
+
+  await runStage("验证未知组件与临时浮层", async () => {
+    const saved = await evaluate(annotator, `window.dockyard.loadWorkspace().then((workspace) => {
+      const artwork = workspace.artworks.find((item) => item.id === ${JSON.stringify(artworkId)});
+      artwork.components.push({
+        id: 'missing-component', name: 'missing-component', library: 'fixture-stable', previewKind: 'reference',
+        instanceId: 'fixture-unknown', elementId: '', sequence: 'fixture-unknown', status: 'confirmed', loadStatus: 'loading',
+        sourceLibraryId: 'fixture-stable', componentKey: 'missing-component',
+        staticModule: { sourceId: 'fixture-stable', componentKey: 'missing-component', protocolVersion: '1', version: '0.1.0' },
+        x: 520, y: 620, width: 190, height: 70, rotation: 0,
+      });
+      return window.dockyard.saveWorkspace(workspace);
+    })`);
+    assert.equal(saved.ok, true, saved.error || "未知组件写入失败");
+    const unknown = await waitFor(
+      () => evaluate(annotator, `(() => {
+        const card = [...document.querySelectorAll('.prototype-overlay-error')]
+          .find((item) => item.dataset.componentId === 'fixture-unknown');
+        return card ? { phase: card.dataset.errorPhase, text: card.textContent } : null;
+      })()`),
+      "未知组件没有显示诊断",
+    );
+    assert.equal(unknown.phase, "contract");
+    assert.ok(unknown.text.includes("unknown-component"), "未知组件没有显示失败原因");
+    assert.equal(await frameEvaluate(annotator, `Boolean(document.querySelector('[data-component-id="fixture-unknown"] .cds--btn'))`, "fixture-stable"), false, "未知组件被默认显示为按钮");
+    const unknownGeometry = await evaluate(annotator, `window.dockyard.loadWorkspace().then((workspace) => {
+      const item = workspace.artworks.find((entry) => entry.id === ${JSON.stringify(artworkId)})
+        ?.components.find((entry) => entry.instanceId === 'fixture-unknown');
+      return { x: item.x, y: item.y, width: item.width, height: item.height, phase: item.staticError?.phase };
+    })`);
+    assert.deepEqual(unknownGeometry, { x: 520, y: 620, width: 190, height: 70, phase: "contract" });
+
+    const dropdownCenter = await frameEvaluate(annotator, `(() => {
+      const field = document.querySelector('[data-component-id="fixture-stable-dropdown"] .cds--list-box__field');
+      if (!field) return null;
+      const rect = field.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`, "fixture-stable");
+    assert.ok(dropdownCenter, "没有找到下拉框入口");
+    await cdp(annotator, "Input.dispatchMouseEvent", { type: "mouseMoved", ...dropdownCenter });
+    await waitFor(
+      () => evaluate(annotator, `document.querySelector('.prototype-overlay-shared.is-active')?.dataset.sourceId === 'fixture-stable'`),
+      "指针没有切换到正确来源的运行页",
+    );
+    assert.equal(await frameEvaluate(annotator, `(() => {
+      const field = document.querySelector('[data-component-id="fixture-stable-dropdown"] .cds--list-box__field');
+      if (!field) return false;
+      field.click();
+      return true;
+    })()`, "fixture-stable"), true, "下拉框入口不能点击");
+    const optionCenter = await waitFor(
+      () => frameEvaluate(annotator, `(() => {
+        const option = document.querySelectorAll('[role="option"]')[1];
+        if (!option) return null;
+        const rect = option.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      })()`, "fixture-stable"),
+      "下拉框临时浮层没有打开",
+    );
+    await cdp(annotator, "Input.dispatchMouseEvent", { type: "mouseMoved", ...optionCenter });
+    assert.equal(await frameEvaluate(annotator, `(() => {
+      const option = document.querySelectorAll('[role="option"]')[1];
+      if (!option) return false;
+      option.click();
+      return true;
+    })()`, "fixture-stable"), true, "下拉框选项不能点击");
+    await waitFor(
+      () => evaluate(annotator, `window.__dockyardContractMessages.some((message) =>
+        message.sourceId === 'fixture-stable' && message.type === 'dropdown-change'
+        && message.componentId === 'fixture-stable-dropdown' && message.choice === 'two')`),
+      "下拉框临时浮层不能交互",
+    );
+    const dropdownGeometry = await evaluate(annotator, `window.dockyard.loadWorkspace().then((workspace) => {
+      const item = workspace.artworks.find((entry) => entry.id === ${JSON.stringify(artworkId)})
+        ?.components.find((entry) => entry.instanceId === 'fixture-stable-dropdown');
+      return { x: item.x, y: item.y, width: item.width, height: item.height };
+    })`);
+    assert.deepEqual(dropdownGeometry, { x: 300, y: 500, width: 300, height: 64 }, "临时浮层改变了实例边界");
+  });
+
   await runStage("保存并重新打开画稿", async () => {
     const saved = await evaluate(annotator, `window.dockyard.loadWorkspace()
       .then((workspace) => window.dockyard.saveWorkspace(workspace))`);
@@ -649,8 +877,8 @@ try {
     );
     assert.equal(
       persisted.artworks[0].components.length,
-      5,
-      "保存文件没有包含五个静态组件",
+      9,
+      "保存文件没有保留全部来源的静态组件",
     );
 
     await evaluate(application.bar, "window.dockyard.closePanel('annotator').then(() => true)");

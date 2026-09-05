@@ -8,6 +8,8 @@ export type StaticSourceDefinition = {
   runtimeUrl: string;
   protocolVersion: string;
   trustLevel: string;
+  testOnly?: boolean;
+  failureSequence?: readonly ("manifest" | "style" | "module")[];
   module: { name: string; version: string; entry: string; styles: string[] };
   components: readonly StaticComponentDefinition[];
 };
@@ -20,7 +22,9 @@ export const OverlayEvent: Readonly<Record<string, string>>;
 export const HostCommand: Readonly<Record<string, string>>;
 export const ContractErrorCode: Readonly<Record<string, string>>;
 export const BUILTIN_STATIC_SOURCES: readonly StaticSourceDefinition[];
+export const TEST_STATIC_SOURCES: readonly StaticSourceDefinition[];
 export const STATIC_SOURCE_REGISTRY: StaticSourceRegistry;
+export function staticSourceRegistry(includeTestSources?: boolean): StaticSourceRegistry;
 export function defineStaticSource(source: StaticSourceDefinition): StaticSourceDefinition;
 export function createStaticSourceRegistry(sources: readonly StaticSourceDefinition[]): StaticSourceRegistry;
 export function resolveStaticComponent(registry: StaticSourceRegistry, selection: { sourceId?: string; componentKey?: string; variantKey?: string; protocolVersion?: string }): ContractFailure | { ok: true; value: { source: StaticSourceDefinition; component: StaticComponentDefinition } };

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Button, Checkbox, DatePicker, DatePickerInput, Dropdown, Toggle } from '@carbon/react';
 import '../../src/carbon.scss';
 import './module-runtime.css';
-import { BUILTIN_STATIC_SOURCES, STATIC_SOURCE_REGISTRY, resolveStaticComponent } from './source-contract.js';
+import { BUILTIN_STATIC_SOURCES, resolveStaticComponent, staticSourceRegistry } from './source-contract.js';
 import { HostCommand, OverlayEvent, postOverlayMessage, rectOf, validateProtocolMessage } from './protocol.js';
 import {
   beginTransformSession,
@@ -32,6 +32,7 @@ type StaticInstance = {
   props?: Record<string, unknown>;
 };
 const SOURCE_ID = new URLSearchParams(location.search).get('source') || BUILTIN_STATIC_SOURCES[0].id;
+const SOURCE_REGISTRY = staticSourceRegistry(new URLSearchParams(location.search).get('fixtures') === '1');
 const isEditableTarget = (target: EventTarget | null) => target instanceof HTMLElement
   && (target.isContentEditable || Boolean(target.closest('input, textarea, select')));
 
@@ -49,7 +50,7 @@ const send = (type: string, componentId: string, element: HTMLElement | null, ex
 };
 
 const acceptInstances = (values: StaticInstance[]) => values.filter((instance) => {
-  const resolved = resolveStaticComponent(STATIC_SOURCE_REGISTRY, instance);
+  const resolved = resolveStaticComponent(SOURCE_REGISTRY, instance);
   if (instance.sourceId === SOURCE_ID && resolved.ok) return true;
   const error = instance.sourceId !== SOURCE_ID
     ? { code: 'source-mismatch', message: `实例来源不匹配：${instance.sourceId || '(empty)'}` }
@@ -100,6 +101,23 @@ function Demo() {
     };
     window.addEventListener('keydown', forwardNativeToolShortcut, true);
     return () => window.removeEventListener('keydown', forwardNativeToolShortcut, true);
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'component') return;
+    const reportPointer = (event: PointerEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const interactive = Boolean(target && target !== document.body
+        && !target.classList.contains('static-overlay-stage')
+        && !target.classList.contains('static-overlay-runtime'));
+      postOverlayMessage(SOURCE_ID, OverlayEvent.pointerPosition, {
+        x: event.clientX,
+        y: event.clientY,
+        interactive,
+      });
+    };
+    window.addEventListener('pointermove', reportPointer, true);
+    return () => window.removeEventListener('pointermove', reportPointer, true);
   }, [mode]);
 
   return (
@@ -271,7 +289,7 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
     : instance.componentKey === 'carbon-checkbox'
       ? <Checkbox id={`checkbox-${instance.id}`} labelText="Checkbox" checked={checked} onChange={(_, data) => { setChecked(data.checked); send('checkbox-change', instance.id, surfaceRef.current, { ...common, checked: data.checked }); }} />
       : instance.componentKey === 'carbon-dropdown'
-        ? <Dropdown id={`dropdown-${instance.id}`} titleText="Dropdown" label="Choose an option" items={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }]} selectedItem={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }].find((item) => item.id === choice)} onChange={({ selectedItem }) => { if (selectedItem) { setChoice(selectedItem.id); send('dropdown-change', instance.id, surfaceRef.current, { ...common, choice: selectedItem.id }); } }} />
+        ? <Dropdown id={`dropdown-${instance.id}`} titleText="Dropdown" label="Choose an option" items={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }]} itemToString={(item) => item?.text || ''} selectedItem={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }].find((item) => item.id === choice)} onChange={({ selectedItem }) => { if (selectedItem) { setChoice(selectedItem.id); send('dropdown-change', instance.id, surfaceRef.current, { ...common, choice: selectedItem.id }); } }} />
         : instance.componentKey === 'carbon-toggle'
           ? <Toggle id={`toggle-${instance.id}`} labelText="Toggle" toggled={toggled} onToggle={(next) => { setToggled(next); send('toggle-change', instance.id, surfaceRef.current, { ...common, toggled: next }); }} />
           : instance.componentKey === 'carbon-button'

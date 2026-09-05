@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1",
+  "sourceId": "fixture-recovering",
+  "name": "fixture-recovering-module",
+  "version": "0.1.0",
+  "protocolVersion": "1",
+  "trustLevel": "test",
+  "entry": "./dist/carbon-static-module.js",
+  "styles": [
+    "./dist/dockyard.css"
+  ],
+  "components": [
+    {
+      "key": "carbon-button",
+      "name": "Button",
+      "categoryPath": [
+        "actions",
+        "button"
+      ],
+      "variants": [
+        {
+          "key": "default",
+          "name": "Default"
+        },
+        {
+          "key": "danger",
+          "name": "Danger",
+          "props": {
+            "kind": "danger"
+          }
+        }
+      ]
+    },
+    {
+      "key": "carbon-date-picker",
+      "name": "DatePicker",
+      "categoryPath": [
+        "forms",
+        "date-picker"
+      ],
+      "variants": [
+        {
+          "key": "default",
+          "name": "Default"
+        }
+      ]
+    },
+    {
+      "key": "carbon-checkbox",
+      "name": "Checkbox",
+      "categoryPath": [
+        "forms",
+        "checkbox"
+      ],
+      "variants": [
+        {
+          "key": "default",
+          "name": "Default"
+        }
+      ]
+    },
+    {
+      "key": "carbon-dropdown",
+      "name": "Dropdown",
+      "categoryPath": [
+        "forms",
+        "dropdown"
+      ],
+      "variants": [
+        {
+          "key": "default",
+          "name": "Default"
+        }
+      ]
+    },
+    {
+      "key": "carbon-toggle",
+      "name": "Toggle",
+      "categoryPath": [
+        "forms",
+        "toggle"
+      ],
+      "variants": [
+        {
+          "key": "default",
+          "name": "Default"
+        }
+      ]
+    }
+  ]
+}
