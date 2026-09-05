@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PROTOTYPE — Static Component Overlay</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #172b4d; background: #f4f5f7; }
+    body { margin: 0; padding: 24px; }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    .note { color: #5e6c84; margin: 0 0 16px; }
+    .stage { position: relative; height: 420px; border: 1px solid #c1c7d0; border-radius: 8px; overflow: hidden; background: white; }
+    .stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    .panel { margin-top: 12px; padding: 12px; border-radius: 8px; background: #172b4d; color: #fff; font: 13px/1.6 ui-monospace, monospace; white-space: pre-wrap; }
+    button { margin: 0 8px 12px 0; padding: 7px 12px; border: 1px solid #b3bac5; border-radius: 5px; background: #fff; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>静态组件 + 全画布 Overlay 原型</h1>
+  <p class="note">PROTOTYPE（一次性验证）：组件在单个 iframe 内直接运行，不嵌套 Storybook iframe。</p>
+  <button id="reload">重新加载静态模块</button>
+  <button id="measure">请求组件边界</button>
+  <div class="stage"><iframe id="overlay" title="Overlay prototype"></iframe></div>
+  <div id="state" class="panel">等待 Overlay 加载…</div>
+
+  <script>
+    const overlay = document.querySelector('#overlay');
+    const state = document.querySelector('#state');
+    let loadCount = 0;
+
+    // 这里用 srcdoc 模拟已经构建好的静态组件模块。
+    // 真实实现中会替换为本地静态服务返回的 module.js / CSS。
+    const staticModule = `<!doctype html><html><head><style>
+      html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+      #root{position:absolute;left:120px;top:120px}.picker-root{position:absolute;left:120px;top:220px}
+      .component{display:inline-flex;align-items:center;gap:10px;padding:16px 20px;border-radius:8px;background:#0f62fe;color:#fff;font:600 16px system-ui,sans-serif;box-shadow:0 2px 5px #0003;cursor:grab;user-select:none}
+      .component:active{cursor:grabbing}.component[data-on=true]{background:#8a3ffc}
+      .date-picker{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid #8d99a8;border-radius:8px;background:#fff;color:#172b4d;font:14px system-ui,sans-serif;box-shadow:0 2px 5px #0002;cursor:grab;user-select:none}.date-picker:active{cursor:grabbing}.date-picker input{padding:7px 8px;border:1px solid #8d99a8;border-radius:4px;font:14px system-ui,sans-serif;cursor:pointer}
+      .hint{position:fixed;left:12px;top:12px;color:#5e6c84;font:12px system-ui,sans-serif}
+    </style></head><body><div class="hint">iframe 内的真实 DOM 组件：点击、选日期或拖动</div><div id="root"><div id="component" class="component" data-on="false"><span>Carbon Button</span><span id="count">0</span></div></div><div class="picker-root"><label class="date-picker" id="picker">Date Picker<input id="date" type="date" value="2026-09-03"></label></div>
+    <script>
+      const buttonRoot=document.querySelector('#root'), pickerRoot=document.querySelector('.picker-root'), el=document.querySelector('#component'), picker=document.querySelector('#picker'), count=document.querySelector('#count'), date=document.querySelector('#date'); let clicks=0;
+      function report(type, target=el){const component=target===picker?'date-picker':'button',r=target.getBoundingClientRect(); parent.postMessage({protocol:'dockyard-overlay',version:'1',sourceId:'carbon-react',type,componentId:'prototype-'+component,component,clicks,date:date.value,rect:{x:r.x,y:r.y,width:r.width,height:r.height},embedded:true},'*')}
+      el.addEventListener('click',()=>{clicks++;count.textContent=clicks;el.dataset.on=clicks%2===1?'true':'false';report('component-click');});
+      date.addEventListener('change',()=>report('date-change',picker));
+      function draggable(target, container){let drag=null; target.addEventListener('pointerdown',e=>{if(e.target===date)return;drag={x:e.clientX,y:e.clientY,left:container.offsetLeft,top:container.offsetTop};target.setPointerCapture(e.pointerId)});target.addEventListener('pointermove',e=>{if(!drag)return;container.style.left=(drag.left+e.clientX-drag.x)+'px';container.style.top=(drag.top+e.clientY-drag.y)+'px';report('component-move',target)});target.addEventListener('pointerup',()=>{if(drag)report('component-drop',target);drag=null})}
+      draggable(el,buttonRoot); draggable(picker,pickerRoot); addEventListener('load',()=>report('component-bounds')); addEventListener('resize',()=>report('component-bounds'));
+    <\/script></body></html>`;
+
+    function load() { loadCount++; if (location.protocol === 'http:' || location.protocol === 'https:') overlay.src = 'static-component-overlay/runtime.html'; else overlay.srcdoc = staticModule; state.textContent = `加载次数：${loadCount}\n等待组件消息…`; }
+    addEventListener('message', e => { if (e.source !== overlay.contentWindow) return; if (e.data?.type === 'module-loading') { state.textContent = '静态模块加载中…\n正在读取 manifest.json（模块清单）和资源。'; return; } if (e.data?.type === 'module-error') { state.textContent = `静态模块加载失败\n阶段：${e.data.phase}\n模块：${e.data.module}\n版本：${e.data.moduleVersion ?? '未知'}\n错误：${e.data.error}`; return; } if (e.data?.type === 'module-ready') { state.textContent = `静态模块已加载：${e.data.module} v${e.data.moduleVersion}\n默认组件：${e.data.defaults?.components?.join(', ') ?? '—'}\n说明：依赖已在构建阶段打包，当前运行时直接执行模块。`; return; } if (!e.data?.rect) return; const {type, component, clicks, date, rect} = e.data; state.textContent = `事件：${type}\n组件：${component}\n点击次数：${clicks}\n选择日期：${date ?? '—'}\n组件实际可见边界：x=${rect.x.toFixed(1)}, y=${rect.y.toFixed(1)}, width=${rect.width.toFixed(1)}, height=${rect.height.toFixed(1)}\n说明：测量对象是组件 DOM，不是 iframe 视口。`; });
+    document.querySelector('#reload').onclick = load;
+    document.querySelector('#measure').onclick = () => overlay.contentWindow?.postMessage({protocol:'dockyard-overlay', version:'1', sourceId:'carbon-react', type:'measure'}, '*');
+    load();
+  </script>
+</body>
+</html>

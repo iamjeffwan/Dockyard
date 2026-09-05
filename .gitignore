@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-electron/
+.tmp/
 .dockyard-data/
 .DS_Store
 *.log
+/public/static-component-overlay/

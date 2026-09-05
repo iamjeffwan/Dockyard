@@ -32,6 +32,7 @@ import type {
   Workspace,
   StorybookStory,
 } from "./types";
+import { STATIC_SOURCES, staticComponentByKey } from "./static-components/registry.js";
 import {
   ExcalidrawCanvas,
   createImageElement,
@@ -42,8 +43,10 @@ import {
 import {
   PrototypeOverlay,
   createViewportChannel,
+  type OverlayMode,
 } from "./overlay";
 import { ComponentInventory, StorybookSidebar } from "./excalidraw/index.js";
+import { nativeExcalidrawToolForShortcut } from "./excalidraw/component-tool-shortcuts.js";
 import { createDeliveryModule } from "./delivery/module";
 import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
 import { useWorkspace } from "./workspace/useWorkspace";
@@ -420,6 +423,7 @@ function AnnotatorView() {
   } | null>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportPreview, setExportPreview] = useState<string | null>(null);
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>("canvas");
   const artwork = activeArtwork(workspace);
   const delivery = useMemo(
     () =>
@@ -688,30 +692,41 @@ function AnnotatorView() {
     }));
     setStatus(`${candidate.name} 已加入画稿`);
   };
-  const insertStory = (story: StorybookStory, x: number, y: number) => {
+  const insertStory = (story: StorybookStory, centerX: number, centerY: number) => {
     if (!artwork) return;
+    const source = STATIC_SOURCES[0];
+    const definition = story.sourceId === source?.id ? staticComponentByKey(story.id) : undefined;
+    if (!definition || !source) {
+      setStatus(`${story.title} / ${story.name} 尚未适配静态组件模块`);
+      return;
+    }
+    const variant = definition.variants?.[0];
     const instance: ComponentInstance = {
-      id: story.id,
-      name: story.name,
-      library: story.sourceId,
+      id: definition.key,
+      name: definition.name,
+      library: source.name,
       previewKind: "reference",
-      description: story.title,
-      docsUrl: story.storyUrl,
+      description: definition.categoryPath.join(" / "),
       instanceId: uid("component"),
       elementId: "",
       sequence: nextComponentSequence(artwork.components),
       status: "confirmed",
-      sourceType: "storybook",
-      sourceId: story.sourceId,
-      storyId: story.id,
-      storyName: story.name,
-      storyTitle: story.title,
-      storyUrl: story.storyUrl,
       loadStatus: "loading",
-      x,
-      y,
-      width: 230,
-      height: 120,
+      sourceLibraryId: source.id,
+      componentKey: definition.key,
+      staticModule: {
+        sourceId: source.id,
+        componentKey: definition.key,
+        protocolVersion: source.protocolVersion,
+        version: source.module.version,
+      },
+      categoryPath: definition.categoryPath,
+      variantKey: variant?.key,
+      props: variant?.props,
+      x: centerX - definition.defaultWidth / 2,
+      y: centerY - definition.defaultHeight / 2,
+      width: definition.defaultWidth,
+      height: definition.defaultHeight,
       rotation: 0,
     };
     updateArtwork((current) => ({ ...current, components: [...current.components, instance], updatedAt: now() }));
@@ -721,14 +736,14 @@ function AnnotatorView() {
     if (!artwork) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const current = viewportChannel.getSnapshot();
-    insertStory(story, (event.clientX - rect.left) / current.zoom - current.scrollX - 115, (event.clientY - rect.top) / current.zoom - current.scrollY - 60);
+    insertStory(story, (event.clientX - rect.left) / current.zoom - current.scrollX, (event.clientY - rect.top) / current.zoom - current.scrollY);
   };
   const addStory = (story: StorybookStory) => {
     if (!artwork) return;
     const current = viewportChannel.getSnapshot();
     const centerX = current.width / 2 / current.zoom - current.scrollX;
     const centerY = current.height / 2 / current.zoom - current.scrollY;
-    insertStory(story, centerX - 115, centerY - 60);
+    insertStory(story, centerX, centerY);
   };
   const handleCanvasExternalDrop = (event: React.DragEvent<HTMLDivElement>) => {
     const storyRaw = event.dataTransfer.getData("application/x-dockyard-story");
@@ -780,6 +795,8 @@ function AnnotatorView() {
           }
           onCreateArtwork={createArtworkFromNativeImage}
           onExternalDrop={handleCanvasExternalDrop}
+          overlayMode={overlayMode}
+          onOverlayModeChange={setOverlayMode}
           renderTopRightUI={() => (
             <Suspense fallback={null}>
               <LazySidebarTrigger />
@@ -812,11 +829,15 @@ function AnnotatorView() {
               />
             </>
           )}
-          overlay={(
+          overlay={({ activateNativeTool }) => (
             <PrototypeOverlay
               components={artwork?.components || []}
               viewport={viewportChannel}
-              interactionEnabled={true}
+              mode={overlayMode}
+              onNativeToolShortcut={(key) => {
+                const tool = nativeExcalidrawToolForShortcut({ key });
+                if (tool) activateNativeTool(tool);
+              }}
               onCommit={(instanceId, patch) =>
                 updateArtwork((current) => ({
                   ...current,

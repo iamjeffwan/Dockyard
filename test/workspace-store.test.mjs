@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createWorkspaceStore } from "../src/workspace/store.ts";
+import { createWorkspaceStore } from "../.tmp/workspace-tests/workspace/store.js";
 
 function workspace(overrides = {}) {
   return {
@@ -164,4 +164,40 @@ test("外部旧工作区不会覆盖当前快照", async () => {
   store.receiveExternal({ ...store.getSnapshot().workspace, updatedAt: "2025-01-01T00:00:00.000Z", artworks: [{ ...store.getSnapshot().workspace.artworks[0], notes: "旧版本" }] });
 
   assert.equal(store.getSnapshot().workspace.artworks[0].notes, "新版本");
+});
+
+
+test("同时收到组件边界和新增实例时，两次更新都保留", async () => {
+  const persisted = [];
+  const store = createWorkspaceStore({
+    load: async () => workspace(),
+    save: async (next) => { await new Promise((resolve) => setTimeout(resolve, 10)); persisted.push(next); return { ok: true }; },
+  });
+  await store.load();
+  const append = (id) => store.dispatch({
+    type: "update-workspace",
+    update: (current) => ({ ...current, artworks: current.artworks.map((art) => ({
+      ...art, components: [...art.components, { instanceId: id }],
+    })) }),
+  });
+  const results = await Promise.all([append('first'), append('second')]);
+  assert.ok(results.every((result) => result.ok));
+  assert.deepEqual(store.getSnapshot().workspace.artworks[0].components.map((item) => item.instanceId), ['first', 'second']);
+  assert.deepEqual(persisted.at(-1).artworks[0].components.map((item) => item.instanceId), ['first', 'second']);
+});
+
+
+test("一次保存失败后，后续更新仍能基于已保存状态继续", async () => {
+  let attempt = 0;
+  const store = createWorkspaceStore({
+    load: async () => workspace(),
+    save: async () => ++attempt === 1 ? { ok: false, error: '无法写入' } : { ok: true },
+  });
+  await store.load();
+  const first = store.dispatch({ type: 'update-artwork', artworkId: 'art-1', patch: { notes: '失败内容' } });
+  const second = store.dispatch({ type: 'update-artwork', artworkId: 'art-1', patch: { name: '保存成功' } });
+  assert.equal((await first).ok, false);
+  assert.equal((await second).ok, true);
+  assert.equal(store.getSnapshot().workspace.artworks[0].notes, '');
+  assert.equal(store.getSnapshot().workspace.artworks[0].name, '保存成功');
 });
