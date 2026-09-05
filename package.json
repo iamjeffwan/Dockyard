@@ -25,6 +25,7 @@
     "verify:component-transforms": "node scripts/verify-component-transforms.mjs",
     "verify:electron-security": "node scripts/verify-electron-security.mjs",
     "verify:bar-position": "node scripts/verify-bar-position.mjs",
+    "verify:canvas-e2e": "pnpm run build && node scripts/verify-canvas-e2e.mjs",
     "prototype:overlay:electron": "electron prototypes/excalidraw-component-overlay/electron-main.cjs",
     "build:static-components": "vite build --config prototypes/static-component-overlay/vite.config.mjs && node scripts/stage-static-components.mjs",
     "build": "pnpm run build:static-components && pnpm run generate:tokens && tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
