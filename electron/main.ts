@@ -37,6 +37,7 @@ import {
   loggerDirectory,
   writeLog,
 } from "./logger.js";
+import { BAR_SIZE, resolveBarPosition } from "./window-position.js";
 import type { StorybookCatalog, StorybookSource, StorybookStory } from "../src/types.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -742,17 +743,16 @@ function broadcast() {
 function createBarWindow() {
   const workArea = screen.getPrimaryDisplay().workArea;
   const saved = workspace?.windowState?.bar;
-  const barWidth = 452;
-  const barHeight = 64;
-  const barX = Math.min(
-    saved?.x ?? workArea.x + workArea.width - barWidth - 24,
-    workArea.x + workArea.width - barWidth,
-  );
+  const position = resolveBarPosition({
+    saved,
+    primaryWorkArea: workArea,
+    workAreas: screen.getAllDisplays().map((display) => display.workArea),
+  });
   barWindow = new BrowserWindow({
-    width: barWidth,
-    height: barHeight,
-    x: barX,
-    y: saved?.y ?? workArea.y + workArea.height - 96,
+    width: BAR_SIZE.width,
+    height: BAR_SIZE.height,
+    x: position.x,
+    y: position.y,
     frame: false,
     transparent: true,
     resizable: false,
@@ -773,7 +773,7 @@ function createBarWindow() {
   barWindow.setAlwaysOnTop(true, "floating");
   loadView(barWindow, "bar");
   barWindow.once("ready-to-show", () => barWindow?.show());
-  barWindow.on("moved", () => {
+  barWindow.on("move", () => {
     if (workspace && barWindow) {
       const [x, y] = barWindow.getPosition();
       workspace.windowState = { ...workspace.windowState, bar: { x, y } };
