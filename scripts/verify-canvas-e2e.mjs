@@ -336,14 +336,47 @@ async function pointerGesture(target, componentId, selector, dx, dy) {
   await delay(200);
 }
 
+async function rotateGesture(target, componentId, rotation) {
+  await frameEvaluate(target, `(() => {
+    const surface = [...document.querySelectorAll('[data-component-id]')]
+      .find((item) => item.dataset.componentId === ${JSON.stringify(componentId)});
+    const handle = surface?.querySelector('.component-rotate-handle');
+    if (!handle) throw new Error('没有找到组件旋转操作点');
+    handle.setPointerCapture = () => {};
+    const surfaceRect = surface.getBoundingClientRect();
+    const handleRect = handle.getBoundingClientRect();
+    const startX = handleRect.left + handleRect.width / 2;
+    const startY = handleRect.top + handleRect.height / 2;
+    const centerX = surfaceRect.left + surfaceRect.width / 2;
+    const centerY = surfaceRect.top + surfaceRect.height / 2;
+    const radius = 100;
+    const endX = centerX + Math.cos(${rotation} - Math.PI / 2) * radius;
+    const endY = centerY + Math.sin(${rotation} - Math.PI / 2) * radius;
+    const pointer = (type, x, y, buttons) => handle.dispatchEvent(new PointerEvent(type, {
+      bubbles: true,
+      pointerId: 1,
+      pointerType: 'mouse',
+      clientX: x,
+      clientY: y,
+      button: 0,
+      buttons,
+    }));
+    pointer('pointerdown', startX, startY, 1);
+    pointer('pointermove', endX, endY, 1);
+    pointer('pointerup', endX, endY, 0);
+    return true;
+  })()`);
+  await delay(200);
+}
+
 async function geometry(target, componentId) {
   return frameEvaluate(target, `(() => {
     const surface = [...document.querySelectorAll('[data-component-id]')]
       .find((item) => item.dataset.componentId === ${JSON.stringify(componentId)});
     if (!surface) return null;
     return {
-      width: surface.style.width,
-      height: surface.style.height,
+      width: Number.parseFloat(surface.style.width),
+      height: Number.parseFloat(surface.style.height),
       transform: surface.style.transform,
     };
   })()`);
@@ -533,14 +566,14 @@ try {
     const moved = await geometry(annotator, componentId);
     assert.notEqual(moved.transform, initial.transform, "移动后位置没有变化");
 
-    await pointerGesture(annotator, componentId, ".component-rotate-handle", 48, 28);
+    await rotateGesture(annotator, componentId, Math.PI / 2);
     const rotated = await geometry(annotator, componentId);
     assert.notEqual(rotated.transform, moved.transform, "旋转后角度没有变化");
 
-    await pointerGesture(annotator, componentId, ".component-resize-handle", 36, 22);
+    await pointerGesture(annotator, componentId, ".component-resize-handle", -22, 36);
     const resized = await geometry(annotator, componentId);
-    assert.notEqual(resized.width, rotated.width, "旋转后缩放没有改变宽度");
-    assert.notEqual(resized.height, rotated.height, "旋转后缩放没有改变高度");
+    assert.ok(Math.abs(resized.width - rotated.width - 36) < 0.01, `旋转后视觉宽度拖动结果错误：${rotated.width} → ${resized.width}`);
+    assert.ok(Math.abs(resized.height - rotated.height - 22) < 0.01, `旋转后视觉高度拖动结果错误：${rotated.height} → ${resized.height}`);
     return resized;
   });
 

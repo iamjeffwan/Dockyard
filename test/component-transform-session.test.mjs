@@ -1,20 +1,15 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import ts from "typescript";
-
-const source = await readFile(
-  new URL("../prototypes/static-component-overlay/transform-session.ts", import.meta.url),
-  "utf8",
-);
-const output = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-}).outputText;
-const { beginTransformSession, updateTransformSession } = await import(
-  `data:text/javascript;base64,${Buffer.from(output).toString("base64")}`
-);
+import {
+  beginTransformSession,
+  updateTransformSession,
+} from "../prototypes/static-component-overlay/transform-session.js";
 
 const initial = { x: 100, y: 80, width: 120, height: 48, rotation: 0 };
+const closeTo = (actual, expected, name) => assert.ok(
+  Math.abs(actual - expected) < 0.000_001,
+  `${name}：期望 ${expected}，实际 ${actual}`,
+);
 
 test("编号拖动按画板缩放换算位移，且不依赖 Alt 键", () => {
   const session = beginTransformSession("move", initial, { x: 20, y: 30 });
@@ -34,6 +29,26 @@ test("缩放保持最小尺寸，旋转可按 Shift 吸附到 15 度", () => {
   const rotate = beginTransformSession("rotate", initial, { x: 160, y: 20 }, { x: 160, y: 104 });
   const next = updateTransformSession(rotate, { x: 244, y: 104 }, { zoom: 1, snapRotation: true });
   assert.equal(next.rotation, Math.PI / 2);
+});
+
+test("缩放位移在零度、四十五度、九十度和不同画布缩放下转换到组件局部坐标", () => {
+  const cases = [
+    { name: "零度 / 100%", rotation: 0, zoom: 1, pointer: { x: 140, y: 120 } },
+    { name: "四十五度 / 100%", rotation: Math.PI / 4, zoom: 1, pointer: { x: 114.1421356237, y: 142.4264068712 } },
+    { name: "九十度 / 100%", rotation: Math.PI / 2, zoom: 1, pointer: { x: 80, y: 140 } },
+    { name: "四十五度 / 200%", rotation: Math.PI / 4, zoom: 2, pointer: { x: 128.2842712475, y: 184.8528137424 } },
+  ];
+
+  for (const example of cases) {
+    const session = beginTransformSession(
+      "resize",
+      { ...initial, rotation: example.rotation },
+      { x: 100, y: 100 },
+    );
+    const next = updateTransformSession(session, example.pointer, { zoom: example.zoom });
+    closeTo(next.width, 160, example.name);
+    closeTo(next.height, 68, example.name);
+  }
 });
 
 test("取消操作可恢复会话开始时的几何信息", () => {
