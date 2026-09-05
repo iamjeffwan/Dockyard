@@ -1,4 +1,5 @@
-import { copyFileSync, cpSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, relative, sep } from 'node:path';
 
 const projectRoot = process.cwd();
@@ -43,3 +44,13 @@ for (const name of sourceFiles) {
   copyFileSync(join(sourceRoot, name), join(targetRoot, name));
 }
 cpSync(buildRoot, join(targetRoot, 'dist'), { recursive: true, force: true });
+
+// Hash the final bytes after staging; source manifests remain generated templates.
+const resources = Object.fromEntries(listEntries(targetRoot)
+  .filter((name) => !name.endsWith('/') && !name.startsWith('manifest'))
+  .map((name) => [`./${name}`, createHash('sha256').update(readFileSync(join(targetRoot, name))).digest('hex')]));
+for (const name of sourceFiles.filter((name) => name.startsWith('manifest'))) {
+  const path = join(targetRoot, name);
+  const manifest = JSON.parse(readFileSync(path, 'utf8'));
+  writeFileSync(path, `${JSON.stringify({ ...manifest, integrity: { algorithm: 'sha256', resources } }, null, 2)}\n`);
+}

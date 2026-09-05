@@ -263,18 +263,23 @@ async function launch() {
     if (!response.ok) throw new Error(`调试端点返回 ${response.status}`);
     return response.json();
   };
-  const bar = await waitFor(
-    async () => (await targets()).find((item) => item.url.includes("view=bar")),
-    `等待工具条页面超时\n${output.value}`,
-  );
-  await waitFor(
-    () => evaluate(
-      bar,
-      "document.readyState === 'complete' && Boolean(window.dockyard)",
-    ),
-    "工具条页面没有完成加载",
-  );
-  return { child, output, targets, bar };
+  try {
+    const bar = await waitFor(
+      async () => (await targets()).find((item) => item.url.includes("view=bar")),
+      `等待工具条页面超时\n${output.value}`,
+    );
+    await waitFor(
+      () => evaluate(
+        bar,
+        "document.readyState === 'complete' && Boolean(window.dockyard)",
+      ),
+      "工具条页面没有完成加载",
+    );
+    return { child, output, targets, bar };
+  } catch (error) {
+    stop(child);
+    throw new Error(`桌面启动失败：${error.message}\n${output.value}`, { cause: error });
+  }
 }
 
 function stop(child) {
@@ -311,68 +316,79 @@ function trashVerificationRoot() {
   if (existsSync(target)) throw new Error(`临时状态仍然存在：${target}`);
 }
 
-async function pointerGesture(target, componentId, selector, dx, dy) {
-  await frameEvaluate(target, `(() => {
+async function componentPoint(target, componentId, selector, sourceId = "carbon-react") {
+  const point = await frameEvaluate(target, `(() => {
     const surface = [...document.querySelectorAll('[data-component-id]')]
       .find((item) => item.dataset.componentId === ${JSON.stringify(componentId)});
-    const handle = surface?.querySelector(${JSON.stringify(selector)});
-    if (!handle) throw new Error('没有找到组件操作点：${selector}');
-    handle.setPointerCapture = () => {};
-    const rect = handle.getBoundingClientRect();
-    const startX = rect.left + rect.width / 2;
-    const startY = rect.top + rect.height / 2;
-    const pointer = (type, x, y, buttons) => handle.dispatchEvent(
-      new PointerEvent(type, {
-        bubbles: true,
-        pointerId: 1,
-        pointerType: 'mouse',
-        clientX: x,
-        clientY: y,
-        button: 0,
-        buttons,
-      }),
-    );
-    pointer('pointerdown', startX, startY, 1);
-    for (let step = 1; step <= 6; step += 1) {
-      pointer('pointermove', startX + (${dx} * step) / 6, startY + (${dy} * step) / 6, 1);
-    }
-    pointer('pointerup', startX + ${dx}, startY + ${dy}, 0);
-    return true;
+    const handle = selector => surface?.querySelector(selector);
+    const node = ${JSON.stringify(selector)} ? handle(${JSON.stringify(selector)}) : surface;
+    if (!node) throw new Error('没有找到组件操作点');
+    const rect = node.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`, sourceId);
+  return toPagePoint(target, point, sourceId);
+}
+
+async function toPagePoint(target, point, sourceId) {
+  const offset = await evaluate(target, `(() => {
+    const frame = [...document.querySelectorAll('.prototype-overlay-shared')]
+      .find((item) => item.dataset.sourceId === ${JSON.stringify(sourceId)})?.querySelector('iframe');
+    const rect = frame.getBoundingClientRect();
+    return { x: rect.left, y: rect.top };
   })()`);
+  return { x: point.x + offset.x, y: point.y + offset.y };
+}
+
+async function clickPoint(target, point) {
+  await cdp(target, "Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
+  await delay(100);
+  await cdp(target, "Input.dispatchMouseEvent", { type: "mousePressed", ...point, button: "left", buttons: 1, clickCount: 1 });
+  await cdp(target, "Input.dispatchMouseEvent", { type: "mouseReleased", ...point, button: "left", buttons: 0, clickCount: 1 });
+}
+
+async function captureEvidence(target, name) {
+  const directory = process.env.DOCKYARD_EVIDENCE_DIR;
+  if (!directory) return;
+  mkdirSync(directory, { recursive: true });
+  const { data } = await cdp(target, "Page.captureScreenshot", { format: "png" });
+  writeFileSync(join(directory, `${name}.png`), Buffer.from(data, "base64"));
+}
+
+async function mouseDrag(target, start, end) {
+  await cdp(target, "Input.dispatchMouseEvent", { type: "mouseMoved", ...start });
+  await delay(100);
+  await cdp(target, "Input.dispatchMouseEvent", {
+    type: "mousePressed", ...start, button: "left", buttons: 1, clickCount: 1,
+  });
+  try {
+    for (let step = 1; step <= 6; step += 1) {
+      await cdp(target, "Input.dispatchMouseEvent", {
+        type: "mouseMoved", button: "left", buttons: 1,
+        x: start.x + (end.x - start.x) * step / 6,
+        y: start.y + (end.y - start.y) * step / 6,
+      });
+      await delay(20);
+    }
+  } finally {
+    await cdp(target, "Input.dispatchMouseEvent", {
+      type: "mouseReleased", ...end, button: "left", buttons: 0, clickCount: 1,
+    });
+  }
   await delay(200);
 }
 
+async function pointerGesture(target, componentId, selector, dx, dy) {
+  const start = await componentPoint(target, componentId, selector);
+  await mouseDrag(target, start, { x: start.x + dx, y: start.y + dy });
+}
+
 async function rotateGesture(target, componentId, rotation) {
-  await frameEvaluate(target, `(() => {
-    const surface = [...document.querySelectorAll('[data-component-id]')]
-      .find((item) => item.dataset.componentId === ${JSON.stringify(componentId)});
-    const handle = surface?.querySelector('.component-rotate-handle');
-    if (!handle) throw new Error('没有找到组件旋转操作点');
-    handle.setPointerCapture = () => {};
-    const surfaceRect = surface.getBoundingClientRect();
-    const handleRect = handle.getBoundingClientRect();
-    const startX = handleRect.left + handleRect.width / 2;
-    const startY = handleRect.top + handleRect.height / 2;
-    const centerX = surfaceRect.left + surfaceRect.width / 2;
-    const centerY = surfaceRect.top + surfaceRect.height / 2;
-    const radius = 100;
-    const endX = centerX + Math.cos(${rotation} - Math.PI / 2) * radius;
-    const endY = centerY + Math.sin(${rotation} - Math.PI / 2) * radius;
-    const pointer = (type, x, y, buttons) => handle.dispatchEvent(new PointerEvent(type, {
-      bubbles: true,
-      pointerId: 1,
-      pointerType: 'mouse',
-      clientX: x,
-      clientY: y,
-      button: 0,
-      buttons,
-    }));
-    pointer('pointerdown', startX, startY, 1);
-    pointer('pointermove', endX, endY, 1);
-    pointer('pointerup', endX, endY, 0);
-    return true;
-  })()`);
-  await delay(200);
+  const start = await componentPoint(target, componentId, ".component-rotate-handle");
+  const center = await componentPoint(target, componentId, "");
+  await mouseDrag(target, start, {
+    x: center.x + Math.cos(rotation - Math.PI / 2) * 100,
+    y: center.y + Math.sin(rotation - Math.PI / 2) * 100,
+  });
 }
 
 async function geometry(target, componentId) {
@@ -580,6 +596,7 @@ try {
     const resized = await geometry(annotator, componentId);
     assert.ok(Math.abs(resized.width - rotated.width - 36) < 0.01, `旋转后视觉宽度拖动结果错误：${rotated.width} → ${resized.width}`);
     assert.ok(Math.abs(resized.height - rotated.height - 22) < 0.01, `旋转后视觉高度拖动结果错误：${rotated.height} → ${resized.height}`);
+    await captureEvidence(annotator, "rotated-resize");
     return resized;
   });
 
@@ -620,7 +637,8 @@ try {
         const components = [...document.querySelectorAll('[data-component-key]')]
           .map((item) => ({ key: item.dataset.componentKey, sourceId: item.dataset.sourceId }))
           .sort((a, b) => a.key.localeCompare(b.key));
-        return components.length === 5 ? components : null;
+        if (components.length !== 5) throw new Error(JSON.stringify(components));
+        return components;
       })()`),
       "五个内置组件没有全部渲染",
     );
@@ -735,13 +753,12 @@ try {
       return true;
     })()`);
     const assertStableWorks = async () => {
-      const clicks = await frameEvaluate(annotator, `(() => {
-        const button = document.querySelector('[data-component-id="fixture-stable-button"] .cds--btn');
-        if (!button) return null;
-        button.click();
-        return button.textContent;
-      })()`, "fixture-stable");
-      assert.ok(clicks?.includes("Carbon Button"), "一个来源失败时稳定来源不可用");
+      const readClicks = () => frameEvaluate(annotator,
+        `document.querySelector('[data-component-id="fixture-stable-button"] .cds--btn')?.textContent`, "fixture-stable");
+      const before = await readClicks();
+      assert.ok(before?.includes("Carbon Button"), "稳定来源未渲染按钮");
+      await clickPoint(annotator, await componentPoint(annotator, "fixture-stable-button", ".cds--btn", "fixture-stable"));
+      await waitFor(async () => { const after = await readClicks(); return after?.includes("Carbon Button") && after !== before; }, "一个来源失败时稳定来源无法通过真实指针点击");
     };
 
     for (const expectedPhase of ["manifest", "style", "module"]) {
@@ -820,25 +837,21 @@ try {
     })`);
     assert.deepEqual(unknownGeometry, { x: 520, y: 620, width: 190, height: 70, phase: "contract" });
 
-    const dropdownCenter = await frameEvaluate(annotator, `(() => {
+    const dropdownLocal = await frameEvaluate(annotator, `(() => {
       const field = document.querySelector('[data-component-id="fixture-stable-dropdown"] .cds--list-box__field');
       if (!field) return null;
       const rect = field.getBoundingClientRect();
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     })()`, "fixture-stable");
-    assert.ok(dropdownCenter, "没有找到下拉框入口");
+    assert.ok(dropdownLocal, "没有找到下拉框入口");
+    const dropdownCenter = await toPagePoint(annotator, dropdownLocal, "fixture-stable");
     await cdp(annotator, "Input.dispatchMouseEvent", { type: "mouseMoved", ...dropdownCenter });
     await waitFor(
       () => evaluate(annotator, `document.querySelector('.prototype-overlay-shared.is-active')?.dataset.sourceId === 'fixture-stable'`),
       "指针没有切换到正确来源的运行页",
     );
-    assert.equal(await frameEvaluate(annotator, `(() => {
-      const field = document.querySelector('[data-component-id="fixture-stable-dropdown"] .cds--list-box__field');
-      if (!field) return false;
-      field.click();
-      return true;
-    })()`, "fixture-stable"), true, "下拉框入口不能点击");
-    const optionCenter = await waitFor(
+    await clickPoint(annotator, dropdownCenter);
+    const optionLocal = await waitFor(
       () => frameEvaluate(annotator, `(() => {
         const option = document.querySelectorAll('[role="option"]')[1];
         if (!option) return null;
@@ -847,13 +860,10 @@ try {
       })()`, "fixture-stable"),
       "下拉框临时浮层没有打开",
     );
+    const optionCenter = await toPagePoint(annotator, optionLocal, "fixture-stable");
     await cdp(annotator, "Input.dispatchMouseEvent", { type: "mouseMoved", ...optionCenter });
-    assert.equal(await frameEvaluate(annotator, `(() => {
-      const option = document.querySelectorAll('[role="option"]')[1];
-      if (!option) return false;
-      option.click();
-      return true;
-    })()`, "fixture-stable"), true, "下拉框选项不能点击");
+    await captureEvidence(annotator, "mixed-source-dropdown");
+    await clickPoint(annotator, optionCenter);
     await waitFor(
       () => evaluate(annotator, `window.__dockyardContractMessages.some((message) =>
         message.sourceId === 'fixture-stable' && message.type === 'dropdown-change'
@@ -907,6 +917,21 @@ try {
   process.stdout.write("真实画板完整组件路径验收通过。\n");
 } catch (error) {
   failure = error;
+  if (process.env.DOCKYARD_EVIDENCE_DIR && application) {
+    try {
+      const target = (await application.targets()).find((item) => item.url.includes("view=annotator"));
+      if (target) {
+        await captureEvidence(target, "failure");
+        const state = await evaluate(target, `window.dockyard.loadWorkspace().then((workspace) => ({
+          components: workspace.artworks[0].components,
+          messages: window.__dockyardContractMessages?.slice(-30),
+        }))`);
+        writeJson(join(process.env.DOCKYARD_EVIDENCE_DIR, "failure.json"), state);
+      }
+    } catch (diagnosticError) {
+      process.stderr.write(`失败现场记录不可用：${diagnosticError.message}\n`);
+    }
+  }
 } finally {
   stop(application?.child);
   await delay(200);

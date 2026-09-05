@@ -17,7 +17,13 @@ pnpm run build
 pnpm start
 ```
 
-当前 Windows（微软桌面系统）开发脚本默认关闭 GPU（图形处理器）和 Chromium 沙箱（浏览器安全隔离），用于兼容受限环境。
+当前 `Windows`（微软桌面系统）启动脚本关闭 `GPU`（图形处理器）加速以兼容受限环境，保留浏览器进程沙箱。组件运行页与主应用权限隔离。
+
+## 静态组件整改验收
+
+`pnpm run verify:canvas-e2e`（真实画板验收）会先构建应用，再自动验证组件交互、真实指针几何操作、来源隔离、故障重试和保存恢复；无需提前启动调试端口。成功或失败后清理本次进程及临时项目，需要本机已安装 `trash`（可恢复删除工具）。
+
+`pnpm run verify:electron-security`（桌面安全验收）和 `pnpm run verify:bar-position`（工具条位置验收）使用已完成的生产构建。
 
 ## 使用流程
 

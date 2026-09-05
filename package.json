@@ -15,7 +15,7 @@
     "test:bar-position": "tsc -p tsconfig.electron.json && node --test test/bar-position.test.mjs",
     "test:workspace": "tsc -p tsconfig.electron.json && node --test test/workspace-files.test.mjs",
     "test:delivery": "node --test test/delivery-module.test.mjs",
-    "test:workspace-store": "node --test test/workspace-store.test.mjs",
+    "test:workspace-store": "tsc src/workspace/store.ts --outDir .tmp/workspace-tests --module ESNext --moduleResolution Bundler --target ES2022 --strict --skipLibCheck --esModuleInterop && node --test test/workspace-store.test.mjs",
     "test:dev-processes": "node --test test/dev-processes.test.mjs",
     "test:static-components": "node --test test/static-component-build.test.mjs test/static-component-registry.test.mjs",
     "verify:artwork-open": "node scripts/verify-artwork-open.mjs",

@@ -85,4 +85,13 @@ test('连续两次静态组件构建保持干净且产物完全一致', { timeou
     '静态组件构建只能发布清单、运行页、协议、样式和组件模块等预期资源',
   );
   assert.deepEqual(second, first, '连续构建的目录结构、文件数量或关键产物摘要不一致');
+  const expectedResources = Object.fromEntries(second
+    .filter((entry) => entry.kind === 'file' && !entry.path.startsWith('manifest'))
+    .map((entry) => [`./${entry.path}`, entry.sha256]));
+  for (const name of ['manifest.json', 'manifest.fixture-stable.json', 'manifest.fixture-recovering.json']) {
+    const manifest = JSON.parse(readFileSync(join(outputRoot, name), 'utf8'));
+    assert.deepEqual(manifest.integrity, {
+      algorithm: 'sha256', resources: expectedResources,
+    }, `${name} 必须描述实际发布资源的完整性`);
+  }
 });

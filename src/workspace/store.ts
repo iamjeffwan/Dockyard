@@ -1,4 +1,4 @@
-import type { Artwork, Workspace } from "../types";
+import type { Artwork, Workspace } from "../types.js";
 
 export type WorkspaceSnapshot = {
   workspace: Workspace;
@@ -63,6 +63,12 @@ export function createWorkspaceStore(
     revision: 0,
   };
   const listeners = new Set<() => void>();
+  let mutations: Promise<unknown> = Promise.resolve();
+  const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = mutations.then(operation);
+    mutations = result.catch(() => undefined);
+    return result;
+  };
 
   const notify = () => listeners.forEach((listener) => listener());
   const publish = async (
@@ -99,91 +105,93 @@ export function createWorkspaceStore(
       notify();
       return snapshot;
     },
-    async dispatch(command) {
-      if (!snapshot.ready) return { ok: false, error: "工作区尚未加载完成" };
-      if (
-        command.expectedRevision !== undefined &&
-        command.expectedRevision !== snapshot.revision
-      ) {
-        return { ok: false, error: "工作区版本已更新，请重新读取" };
-      }
-
-      const current = snapshot.workspace;
-      if (command.type === "update-workspace") {
-        const next = command.update(current);
-        const currentCompleted = new Map(
-          current.artworks
-            .filter((item) => item.status === "completed")
-            .map((item) => [item.id, JSON.stringify(item)]),
-        );
-        const currentDraftIds = new Set(
-          current.artworks.filter((item) => item.status !== "completed").map((item) => item.id),
-        );
-        for (const item of next.artworks) {
-          if (item.status === "completed" && currentCompleted.get(item.id) !== JSON.stringify(item)) {
-            return {
-              ok: false,
-              error: currentDraftIds.has(item.id)
-                ? "请通过完成命令生成完成记录"
-                : "已完成稿件为只读，请通过完成或删除命令修改",
-            };
-          }
+    dispatch(command) {
+      return enqueue(async () => {
+        if (!snapshot.ready) return { ok: false, error: "工作区尚未加载完成" };
+        if (
+          command.expectedRevision !== undefined &&
+          command.expectedRevision !== snapshot.revision
+        ) {
+          return { ok: false, error: "工作区版本已更新，请重新读取" };
         }
-        const saved = await publish(next, command.persist !== false);
+
+        const current = snapshot.workspace;
+        if (command.type === "update-workspace") {
+          const next = command.update(current);
+          const currentCompleted = new Map(
+            current.artworks
+              .filter((item) => item.status === "completed")
+              .map((item) => [item.id, JSON.stringify(item)]),
+          );
+          const currentDraftIds = new Set(
+            current.artworks.filter((item) => item.status !== "completed").map((item) => item.id),
+          );
+          for (const item of next.artworks) {
+            if (item.status === "completed" && currentCompleted.get(item.id) !== JSON.stringify(item)) {
+              return {
+                ok: false,
+                error: currentDraftIds.has(item.id)
+                  ? "请通过完成命令生成完成记录"
+                  : "已完成稿件为只读，请通过完成或删除命令修改",
+              };
+            }
+          }
+          const saved = await publish(next, command.persist !== false);
+          if (!saved.ok) return { ok: false, error: saved.error || "工作区保存失败" };
+          return { ok: true };
+        }
+
+        const target = current.artworks.find((item) => item.id === command.artworkId);
+        if (!target) return { ok: false, error: "当前稿件不存在" };
+
+        let next: Workspace;
+        if (command.type === "update-artwork") {
+          if (target.status === "completed") return { ok: false, error: "已完成稿件为只读" };
+          next = {
+            ...current,
+            artworks: current.artworks.map((item) =>
+              item.id === command.artworkId
+                ? { ...item, ...command.patch, updatedAt: command.patch.updatedAt || new Date().toISOString() }
+                : item,
+            ),
+            updatedAt: new Date().toISOString(),
+          };
+        } else if (command.type === "delete-artwork") {
+          next = {
+            ...current,
+            currentArtworkId:
+              current.currentArtworkId === command.artworkId ? null : current.currentArtworkId,
+            artworks: current.artworks.filter((item) => item.id !== command.artworkId),
+            updatedAt: new Date().toISOString(),
+          };
+        } else {
+          if (target.status === "completed") return { ok: false, error: "该稿件已经完成" };
+          next = {
+            ...current,
+            currentArtworkId: null,
+            artworks: current.artworks.map((item) =>
+              item.id === command.artworkId
+                ? {
+                    ...item,
+                    status: "completed",
+                    completedAt: command.completedAt,
+                    completedPreviewDataUrl: command.previewDataUrl,
+                    completedComponentsText: command.componentsText,
+                    record: command.record,
+                    updatedAt: command.completedAt,
+                  }
+                : item,
+            ),
+            updatedAt: command.completedAt,
+          };
+        }
+
+        const saved = await publish(next, true);
         if (!saved.ok) return { ok: false, error: saved.error || "工作区保存失败" };
         return { ok: true };
-      }
-
-      const target = current.artworks.find((item) => item.id === command.artworkId);
-      if (!target) return { ok: false, error: "当前稿件不存在" };
-
-      let next: Workspace;
-      if (command.type === "update-artwork") {
-        if (target.status === "completed") return { ok: false, error: "已完成稿件为只读" };
-        next = {
-          ...current,
-          artworks: current.artworks.map((item) =>
-            item.id === command.artworkId
-              ? { ...item, ...command.patch, updatedAt: command.patch.updatedAt || new Date().toISOString() }
-              : item,
-          ),
-          updatedAt: new Date().toISOString(),
-        };
-      } else if (command.type === "delete-artwork") {
-        next = {
-          ...current,
-          currentArtworkId:
-            current.currentArtworkId === command.artworkId ? null : current.currentArtworkId,
-          artworks: current.artworks.filter((item) => item.id !== command.artworkId),
-          updatedAt: new Date().toISOString(),
-        };
-      } else {
-        if (target.status === "completed") return { ok: false, error: "该稿件已经完成" };
-        next = {
-          ...current,
-          currentArtworkId: null,
-          artworks: current.artworks.map((item) =>
-            item.id === command.artworkId
-              ? {
-                  ...item,
-                  status: "completed",
-                  completedAt: command.completedAt,
-                  completedPreviewDataUrl: command.previewDataUrl,
-                  completedComponentsText: command.componentsText,
-                  record: command.record,
-                  updatedAt: command.completedAt,
-                }
-              : item,
-          ),
-          updatedAt: command.completedAt,
-        };
-      }
-
-      const saved = await publish(next, true);
-      if (!saved.ok) return { ok: false, error: saved.error || "工作区保存失败" };
-      return { ok: true };
+      });
     },
-    save: () => (snapshot.ready ? ports.save(snapshot.workspace) : Promise.resolve({ ok: false, error: "工作区尚未加载完成" })),
+    save: () => enqueue(() => snapshot.ready ? ports.save(snapshot.workspace) : Promise.resolve({ ok: false, error: "工作区尚未加载完成" })),
     receiveExternal(workspace) {
       if (workspace.updatedAt < snapshot.workspace.updatedAt) return;
       snapshot = { workspace, ready: true, revision: snapshot.revision + 1 };
