@@ -29,6 +29,7 @@
     "prototype:overlay:electron": "electron prototypes/excalidraw-component-overlay/electron-main.cjs",
     "prototype:page-wireframe": "node prototypes/page-wireframe-generation/generate.mjs",
     "prototype:page-wireframe:evaluate": "node prototypes/page-wireframe-generation/evaluation/generate.mjs",
+    "prototype:design-relations": "node prototypes/design-relations/serve.mjs",
     "build:static-components": "node scripts/generate-static-component-manifest.mjs && vite build --config prototypes/static-component-overlay/vite.config.mjs && node scripts/stage-static-components.mjs",
     "build": "pnpm run build:static-components && pnpm run generate:tokens && tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
     "typecheck": "pnpm run generate:tokens && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",

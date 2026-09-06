@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "designNodes": [
+    {
+      "id": "nav-system",
+      "label": "系统管理菜单",
+      "elementIds": ["nav-system-hit", "nav-system-text"],
+      "anchorElementId": "nav-system-hit",
+      "role": "trigger"
+    },
+    {
+      "id": "screen-system",
+      "label": "系统管理页面",
+      "elementIds": ["screen-system-frame", "screen-system-title"],
+      "anchorElementId": "screen-system-frame",
+      "role": "screen"
+    },
+    {
+      "id": "search-slot",
+      "label": "患者搜索区域",
+      "elementIds": ["search-slot-frame", "search-slot-text"],
+      "anchorElementId": "search-slot-frame",
+      "role": "component-slot"
+    }
+  ],
+  "interactions": [
+    {
+      "id": "I1",
+      "sourceNodeId": "nav-system",
+      "event": "click",
+      "action": "navigate",
+      "targetNodeId": "screen-system",
+      "arrowElementId": "interaction-I1",
+      "label": "点击 · 跳转"
+    }
+  ],
+  "componentBindings": [
+    {
+      "id": "C1",
+      "targetNodeId": "search-slot",
+      "componentRefId": "shadcn-input",
+      "connectorElementId": "component-C1",
+      "usageIntent": "用于患者姓名或编号搜索",
+      "customization": "适配槽位宽度，保持正常文字尺寸"
+    }
+  ],
+  "componentRefs": {
+    "shadcn-input": {
+      "refId": "shadcn-input",
+      "library": "shadcn/ui",
+      "component": "Input",
+      "variant": "default"
+    }
+  }
+}
