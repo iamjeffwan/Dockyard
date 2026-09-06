@@ -1,55 +1,40 @@
 {
   "version": 1,
   "designNodes": [
-    {
-      "id": "nav-system",
-      "label": "系统管理菜单",
-      "elementIds": ["nav-system-hit", "nav-system-text"],
-      "anchorElementId": "nav-system-hit",
-      "role": "trigger"
-    },
-    {
-      "id": "screen-system",
-      "label": "系统管理页面",
-      "elementIds": ["screen-system-frame", "screen-system-title"],
-      "anchorElementId": "screen-system-frame",
-      "role": "screen"
-    },
-    {
-      "id": "search-slot",
-      "label": "患者搜索区域",
-      "elementIds": ["search-slot-frame", "search-slot-text"],
-      "anchorElementId": "search-slot-frame",
-      "role": "component-slot"
-    }
+    { "id": "node-main-screen", "label": "患者信息管理主页面", "role": "screen" },
+    { "id": "node-nav-followup", "label": "回访菜单", "role": "trigger" },
+    { "id": "node-nav-system", "label": "系统管理菜单", "role": "trigger" },
+    { "id": "node-search-slot", "label": "患者搜索区域", "role": "component-slot" },
+    { "id": "node-system-screen", "label": "系统管理页面", "role": "screen" }
   ],
   "interactions": [
     {
       "id": "I1",
-      "sourceNodeId": "nav-system",
+      "sourceNodeId": "node-nav-system",
+      "targetNodeId": "node-system-screen",
       "event": "click",
       "action": "navigate",
-      "targetNodeId": "screen-system",
-      "arrowElementId": "interaction-I1",
+      "arrowElementId": "interaction-arrow-I1",
       "label": "点击 · 跳转"
     }
   ],
   "componentBindings": [
     {
       "id": "C1",
-      "targetNodeId": "search-slot",
+      "targetNodeId": "node-search-slot",
       "componentRefId": "shadcn-input",
-      "connectorElementId": "component-C1",
-      "usageIntent": "用于患者姓名或编号搜索",
-      "customization": "适配槽位宽度，保持正常文字尺寸"
+      "connectorElementId": "component-link-C1",
+      "cardNodeId": "component-card-C1",
+      "usageIntent": "在该位置使用所选组件",
+      "customization": "开发时根据布局适配，不进行非等比缩放"
     }
   ],
   "componentRefs": {
     "shadcn-input": {
-      "refId": "shadcn-input",
       "library": "shadcn/ui",
       "component": "Input",
-      "variant": "default"
+      "variant": "default",
+      "summary": "文本输入"
     }
   }
 }
