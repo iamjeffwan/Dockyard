@@ -1,0 +1,4 @@
+interface:
+  display_name: "页面原型生成"
+  short_description: "根据自然描述生成多种可编辑的 Excalidraw 低保真页面原型"
+  default_prompt: "根据我的自然描述生成三种结构不同的低保真页面原型，并输出可编辑的 Excalidraw 原生图稿。"
