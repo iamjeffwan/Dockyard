@@ -22,7 +22,7 @@
     {
       "id": "C1",
       "targetNodeId": "node-search-slot",
-      "componentRefId": "carbon-search",
+      "componentRefId": "carbon-dropdown",
       "connectorElementId": "component-link-C1",
       "cardNodeId": "component-card-C1",
       "usageIntent": "在该位置使用所选组件",
@@ -30,11 +30,11 @@
     }
   ],
   "componentRefs": {
-    "carbon-search": {
+    "carbon-dropdown": {
       "library": "Carbon",
-      "component": "Search",
-      "variant": "small",
-      "summary": "带搜索图标的输入框"
+      "component": "Dropdown",
+      "variant": "default",
+      "summary": "下拉选择"
     }
   }
 }
