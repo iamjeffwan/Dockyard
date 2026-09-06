@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
-import { Cable, Workflow, X } from "lucide-react";
+import { Brush, Cable, Eye, Link2, Search, Workflow, X } from "lucide-react";
 import { Excalidraw, convertToExcalidrawElements } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import "@excalidraw/excalidraw/index.css";
@@ -20,9 +20,12 @@ const nodeInfo: Record<string, { label: string; role: string }> = {
 };
 
 const componentCatalog = {
-  "shadcn-input": { library: "shadcn/ui", component: "Input", variant: "default", summary: "文本输入" },
-  "carbon-search": { library: "Carbon", component: "Search", variant: "small", summary: "带搜索图标的输入框" },
-  "shadcn-combobox": { library: "shadcn/ui", component: "Combobox", variant: "default", summary: "输入与选项组合" },
+  "shadcn-input": { library: "shadcn/ui", component: "Input", variant: "default", summary: "简洁文本输入", category: "表单 / 输入", keywords: "input 输入 搜索" },
+  "carbon-search": { library: "Carbon", component: "Search", variant: "small", summary: "带搜索图标的输入框", category: "表单 / 搜索", keywords: "search 搜索 input" },
+  "shadcn-combobox": { library: "shadcn/ui", component: "Combobox", variant: "default", summary: "输入与选项组合", category: "表单 / 选择", keywords: "combobox 下拉 选择 搜索" },
+  "carbon-dropdown": { library: "Carbon", component: "Dropdown", variant: "default", summary: "结构明确的下拉选择", category: "表单 / 选择", keywords: "dropdown 下拉 选择" },
+  "shadcn-button": { library: "shadcn/ui", component: "Button", variant: "default", summary: "主要操作按钮", category: "操作 / 按钮", keywords: "button 按钮 操作" },
+  "carbon-toggle": { library: "Carbon", component: "Toggle", variant: "small", summary: "布尔状态切换", category: "表单 / 开关", keywords: "toggle switch 开关" },
 };
 
 const baseSkeleton: any[] = [
@@ -138,6 +141,18 @@ function ToolbarTools({ mode, onMode }: { mode: Mode; onMode: (mode: Mode) => vo
   </>, host);
 }
 
+function ComponentVisual({ componentRefId, compact = false }: { componentRefId: string; compact?: boolean }) {
+  if (componentRefId === "shadcn-button") return <span className="demo-button">保存患者</span>;
+  if (componentRefId === "carbon-toggle") return <span className="demo-toggle"><i />启用提醒</span>;
+  if (componentRefId === "carbon-dropdown" || componentRefId === "shadcn-combobox") {
+    return <span className="demo-select">{componentRefId === "carbon-dropdown" ? "请选择状态" : "搜索并选择患者"}<b>⌄</b></span>;
+  }
+  return <span className={`demo-input${componentRefId === "carbon-search" ? " with-search" : ""}`}>
+    {componentRefId === "carbon-search" && <Search size={compact ? 13 : 16} />}
+    <span>{componentRefId === "carbon-search" ? "搜索患者" : "输入患者姓名或编号"}</span>
+  </span>;
+}
+
 function App() {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [mode, setMode] = useState<Mode>("select"); const modeRef = useRef(mode);
@@ -149,10 +164,18 @@ function App() {
   const [bindings, setBindings] = useState<ComponentBinding[]>([]); const bindingsRef = useRef(bindings);
   const [message, setMessage] = useState("选择画板工具开始体验");
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [componentQuery, setComponentQuery] = useState("");
+  const [componentSource, setComponentSource] = useState("全部");
+  const [selectedComponentRefId, setSelectedComponentRefId] = useState("shadcn-input");
+  const [sketchSearchOpen, setSketchSearchOpen] = useState(false);
+  const [sketchMatched, setSketchMatched] = useState(false);
+  const [overlayPreviewRefId, setOverlayPreviewRefId] = useState<string | null>(null);
+  const [canvasViewport, setCanvasViewport] = useState({ zoom: 1, scrollX: 0, scrollY: 0 });
   const lastSelection = useRef("");
 
   const syncMode = (next: Mode) => {
     modeRef.current = next; setMode(next); pendingRef.current = null; setPendingNodeId(null); lastSelection.current = "";
+    setOverlayPreviewRefId(null); setSketchSearchOpen(false);
     const nextPhase = next === "interaction" ? "source" : next === "component" ? "slot" : "idle"; phaseRef.current = nextPhase; setPhase(nextPhase);
     setMessage(next === "interaction" ? "先选择交互触发元素" : next === "component" ? "先选择图稿中的组件使用位置" : "选择模式");
     api?.updateScene({ appState: { selectedElementIds: {}, activeTool: { ...api.getAppState().activeTool, type: "selection", customType: null } } as any });
@@ -164,12 +187,16 @@ function App() {
 
   const chooseComponent = (componentRefId: string) => {
     const targetNodeId = pendingRef.current; if (!targetNodeId) return;
-    const id = `C${bindingsRef.current.length + 1}`;
-    const next = [...bindingsRef.current, { id, targetNodeId, componentRefId, connectorElementId: `component-link-${id}`, cardNodeId: `component-card-${id}`, usageIntent: "在该位置使用所选组件", customization: "开发时根据布局适配，不进行非等比缩放" }];
-    bindingsRef.current = next; setBindings(next); pendingRef.current = null; setPendingNodeId(null); phaseRef.current = "slot"; setPhase("slot"); setMessage(`${id} 已建立：虚线连接图稿位置与组件参考卡`); refreshScene(interactionsRef.current, next);
+    const existing = bindingsRef.current.find((item) => item.targetNodeId === targetNodeId);
+    const id = existing?.id || `C${bindingsRef.current.length + 1}`;
+    const binding = { id, targetNodeId, componentRefId, connectorElementId: `component-link-${id}`, cardNodeId: `component-card-${id}`, usageIntent: "在该位置使用所选组件", customization: "开发时根据布局适配，不进行非等比缩放" };
+    const next = existing ? bindingsRef.current.map((item) => item.id === id ? binding : item) : [...bindingsRef.current, binding];
+    bindingsRef.current = next; setBindings(next); refreshScene(interactionsRef.current, next); syncMode("select"); setMessage(`${id} 已建立：虚线连接图稿位置与组件参考卡`);
   };
 
   const onChange = useCallback((elements: readonly any[], appState: any) => {
+    const zoom = Number(appState.zoom?.value) || 1;
+    setCanvasViewport((current) => current.zoom === zoom && current.scrollX === appState.scrollX && current.scrollY === appState.scrollY ? current : { zoom, scrollX: appState.scrollX || 0, scrollY: appState.scrollY || 0 });
     if (modeRef.current === "select") return;
     const selected = Object.keys(appState.selectedElementIds || {}).filter((id) => appState.selectedElementIds[id]);
     const nodeId = selected.find((id) => nodeInfo[id]); if (!nodeId || nodeId === lastSelection.current) return; lastSelection.current = nodeId;
@@ -180,12 +207,27 @@ function App() {
         const next = [...interactionsRef.current, { id, sourceNodeId: pendingRef.current!, targetNodeId: nodeId, event: eventRef.current, action: actionRef.current, arrowElementId: `interaction-arrow-${id}`, label: `${eventLabel} · ${actionLabel}` }];
         interactionsRef.current = next; setInteractions(next); pendingRef.current = null; setPendingNodeId(null); phaseRef.current = "source"; setPhase("source"); setMessage(`${id} 已建立：箭头两端已绑定真实元素`); refreshScene(next, bindingsRef.current);
       }
-    } else { pendingRef.current = nodeId; setPendingNodeId(nodeId); phaseRef.current = "component"; setPhase("component"); setMessage(`位置：${nodeInfo[nodeId].label}。请选择组件`); }
+    } else { pendingRef.current = nodeId; setPendingNodeId(nodeId); phaseRef.current = "component"; setPhase("component"); setMessage(`位置：${nodeInfo[nodeId].label}。侧栏已显示可选组件`); }
     setTimeout(() => { lastSelection.current = ""; api?.updateScene({ appState: { selectedElementIds: {} } as any }); }, 0);
   }, [api]);
 
   const exportData = useMemo(() => ({ version: 1, designNodes: Object.entries(nodeInfo).map(([id, info]) => ({ id, ...info })), interactions, componentBindings: bindings, componentRefs: Object.fromEntries(bindings.map((item) => [item.componentRefId, componentCatalog[item.componentRefId as keyof typeof componentCatalog]])) }), [interactions, bindings]);
   const count = interactions.length + bindings.length;
+  const visibleComponents = Object.entries(componentCatalog).filter(([id, item]) => {
+    const matchesSource = componentSource === "全部" || item.library === componentSource;
+    const query = componentQuery.trim().toLowerCase();
+    const matchesQuery = !query || `${item.component} ${item.summary} ${item.category} ${item.keywords}`.toLowerCase().includes(query);
+    const matchesSketch = !sketchMatched || ["shadcn-input", "carbon-search", "shadcn-combobox"].includes(id);
+    return matchesSource && matchesQuery && matchesSketch;
+  });
+  const selectedComponent = componentCatalog[selectedComponentRefId as keyof typeof componentCatalog];
+  const previewTarget = pendingNodeId ? baseGeometry[pendingNodeId] : null;
+
+  useEffect(() => {
+    if (visibleComponents.length && !visibleComponents.some(([id]) => id === selectedComponentRefId)) {
+      setSelectedComponentRefId(visibleComponents[0][0]);
+    }
+  }, [componentQuery, componentSource, selectedComponentRefId, sketchMatched, visibleComponents]);
 
   useEffect(() => {
     (window as any).__dockyardRelationPrototype = {
@@ -198,10 +240,21 @@ function App() {
     <Excalidraw initialData={{ elements: buildElements([], []), appState: { viewBackgroundColor: "#ffffff", zoom: { value: 0.72 as any }, scrollX: 35, scrollY: 35 } }} excalidrawAPI={(value) => { setApi(value); requestAnimationFrame(() => value.scrollToContent(value.getSceneElements(), { fitToViewport: true, viewportZoomFactor: 0.82, animate: false })); }} onChange={onChange} langCode="zh-CN" theme="light" UIOptions={{ dockedSidebarBreakpoint: 0, canvasActions: { loadScene: false, saveToActiveFile: false } }}>
       <ToolbarTools mode={mode} onMode={syncMode} />
     </Excalidraw>
-    {mode !== "select" && <div className="relation-popover">
+    {(mode === "interaction" || (mode === "component" && phase !== "component")) && <div className="relation-popover">
       <div className="popover-head"><strong>{mode === "interaction" ? "添加交互" : "关联组件"}</strong><button onClick={() => syncMode("select")} aria-label="关闭关系工具"><X size={16} /></button></div>
-      {mode === "interaction" ? <><div className="selectors"><label>触发<select value={eventType} onChange={(e) => { eventRef.current = e.target.value; setEventType(e.target.value); }}><option value="click">点击</option><option value="change">选择</option></select></label><label>行为<select value={actionType} onChange={(e) => { actionRef.current = e.target.value; setActionType(e.target.value); }}><option value="navigate">跳转</option><option value="switch">切换</option></select></label></div><p>{phase === "target" ? `起点：${nodeInfo[pendingNodeId!]?.label}` : "第一步选择触发元素，第二步选择目标页面"}</p></> : <>{phase === "component" ? <div className="component-options">{Object.entries(componentCatalog).map(([id, item]) => <button key={id} onClick={() => chooseComponent(id)}><b>{item.component}</b><span>{item.library} · {item.variant}</span></button>)}</div> : <p>选择图稿中需要使用组件的位置</p>}</>}
+      {mode === "interaction" ? <><div className="selectors"><label>触发<select value={eventType} onChange={(e) => { eventRef.current = e.target.value; setEventType(e.target.value); }}><option value="click">点击</option><option value="change">选择</option></select></label><label>行为<select value={actionType} onChange={(e) => { actionRef.current = e.target.value; setActionType(e.target.value); }}><option value="navigate">跳转</option><option value="switch">切换</option></select></label></div><p>{phase === "target" ? `起点：${nodeInfo[pendingNodeId!]?.label}` : "第一步选择触发元素，第二步选择目标页面"}</p></> : <p>先选择图稿中需要使用组件的位置，随后打开组件侧栏。</p>}
     </div>}
+    {mode === "component" && phase === "component" && pendingNodeId && <aside className="component-drawer" aria-label="组件选择侧栏">
+      <header className="drawer-head"><div><small>正在为图稿位置选择组件</small><strong>{nodeInfo[pendingNodeId].label}</strong></div><button onClick={() => syncMode("select")} aria-label="关闭组件侧栏"><X size={18} /></button></header>
+      <div className="drawer-search"><Search size={16} /><input aria-label="查找组件" placeholder="查找组件或故事" value={componentQuery} onChange={(event) => { setComponentQuery(event.target.value); setSketchMatched(false); }} /><button className={sketchSearchOpen ? "active" : ""} onClick={() => setSketchSearchOpen(!sketchSearchOpen)} title="草图检索"><Brush size={16} /></button></div>
+      <div className="source-filter" aria-label="组件来源">{["全部", "shadcn/ui", "Carbon"].map((source) => <button className={componentSource === source ? "active" : ""} key={source} onClick={() => setComponentSource(source)}>{source}</button>)}</div>
+      {sketchSearchOpen && <section className="sketch-search-card"><div className="sketch-selection"><span>当前画板选区</span><div><Search size={14} />搜索患者</div></div><p>沿用项目已有的草图识别能力，根据轮廓和文字寻找组件。</p><button onClick={() => { setSketchMatched(true); setComponentQuery(""); setSketchSearchOpen(false); setSelectedComponentRefId("carbon-search"); }}>使用当前选区检索</button></section>}
+      {sketchMatched && <div className="match-banner"><Brush size={14} /><span>草图匹配结果 · 3 个候选</span><button onClick={() => setSketchMatched(false)}>查看全部</button></div>}
+      <div className="component-results">{visibleComponents.map(([id, item]) => <button className={`component-result${selectedComponentRefId === id ? " selected" : ""}`} key={id} onClick={() => setSelectedComponentRefId(id)}><span className="result-preview"><ComponentVisual componentRefId={id} compact /></span><span className="result-copy"><b>{item.component}</b><small>{item.library} · {item.category}</small></span></button>)}{!visibleComponents.length && <p className="empty">没有匹配的组件</p>}</div>
+      <section className="component-preview"><div className="preview-heading"><div><small>真实效果预览</small><strong>{selectedComponent.component} · {selectedComponent.variant}</strong></div><span>{selectedComponent.library}</span></div><div className="preview-stage"><ComponentVisual componentRefId={selectedComponentRefId} /></div><p>{selectedComponent.summary}。开发时允许按布局调整属性和样式。</p></section>
+      <footer className="drawer-actions"><button className="preview-action" onClick={() => { setOverlayPreviewRefId(selectedComponentRefId); setMessage(`正在画板上预览 ${selectedComponent.component} 的真实尺寸`); }}><Eye size={16} />放到画板预览</button><button className="link-action" onClick={() => chooseComponent(selectedComponentRefId)}><Link2 size={16} />建立组件关联</button></footer>
+    </aside>}
+    {overlayPreviewRefId && previewTarget && <div className="canvas-component-preview" style={{ left: (previewTarget.x + canvasViewport.scrollX) * canvasViewport.zoom, top: (previewTarget.y + canvasViewport.scrollY) * canvasViewport.zoom, transform: `scale(${canvasViewport.zoom})` }}><button onClick={() => setOverlayPreviewRefId(null)} aria-label="关闭画板组件预览"><X size={13} /></button><ComponentVisual componentRefId={overlayPreviewRefId} /></div>}
     <div className="relation-status"><span>{message}</span><button onClick={() => setSummaryOpen(!summaryOpen)}>关系 {count}</button></div>
     {summaryOpen && <div className="relation-summary"><div className="popover-head"><strong>图稿关系</strong><button onClick={() => setSummaryOpen(false)} aria-label="关闭关系清单"><X size={16} /></button></div>{!count && <p className="empty">尚未建立关系</p>}{interactions.map((item) => <div className="summary-item" key={item.id}><b>{item.id}　{nodeInfo[item.sourceNodeId].label} → {nodeInfo[item.targetNodeId].label}</b><span>{item.label} · 原生绑定箭头</span></div>)}{bindings.map((item) => { const component = componentCatalog[item.componentRefId as keyof typeof componentCatalog]; return <div className="summary-item component" key={item.id}><b>{item.id}　{nodeInfo[item.targetNodeId].label}</b><span>{component.library} · {component.component} · {component.variant}</span></div>; })}<button className="copy" onClick={() => navigator.clipboard.writeText(JSON.stringify(exportData, null, 2))}>复制模型可读数据</button></div>}
   </div>;
