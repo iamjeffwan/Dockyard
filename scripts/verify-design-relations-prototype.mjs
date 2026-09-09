@@ -250,6 +250,7 @@ try {
       previewElementId: layout.connector?.customData?.previewElementId,
       sourceId: layout.connector?.customData?.sourceId,
       componentKey: layout.connector?.customData?.componentKey,
+      variantKey: layout.connector?.customData?.variantKey,
     },
     {
       role: "component-binding",
@@ -259,6 +260,7 @@ try {
       previewElementId: "component-preview-C1",
       sourceId: "carbon-react",
       componentKey: "carbon-button",
+      variantKey: "default",
     },
     "组件关联箭头缺少完整的组件身份标记",
   );

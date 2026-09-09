@@ -12,7 +12,6 @@ import { createViewportChannel, viewportFromAppState } from "../../src/overlay/v
 import { staticComponentByKey, STATIC_SOURCES } from "../../src/static-components/registry.js";
 import type { ComponentInstance, StorybookStory } from "../../src/types.js";
 import {
-  DockyardRole,
   createComponentBindingData,
   createComponentCardData,
   createComponentPreviewData,
@@ -34,6 +33,7 @@ type ComponentBinding = {
   componentRefId: string;
   sourceId: string;
   componentName: string;
+  variantKey?: string;
   targetLabel: string;
   connectorElementId: string;
   cardNodeId: string;
@@ -202,7 +202,7 @@ function relationSkeleton(interactions: Interaction[], bindings: ComponentBindin
       { id: `${item.id}-badge-text`, type: "text", x: contentX + 12 * scaleX, y: y + 23 * scaleY, text: item.id, fontSize: 14 * textScale, strokeColor: "#4b43dc", groupIds: [`group-${item.id}`] },
       { id: `${item.id}-library`, type: "text", x: contentX + 59 * scaleX, y: y + 22 * scaleY, text: `${component.library} · ${component.component} · ${component.variant}`, fontSize: 14 * textScale, groupIds: [`group-${item.id}`] },
       { id: item.previewNodeId, type: "rectangle", x: contentX, y: y + CARD_LAYOUT.previewTop * scaleY, width: CARD_LAYOUT.previewWidth * scaleX, height: CARD_LAYOUT.previewHeight * scaleY, strokeColor: "#9aa1ad", backgroundColor: "#f8f9fa", fillStyle: "solid", roughness: 0, groupIds: [`group-${item.id}`], customData: { role: "component-preview", bindingId: item.id, ...createComponentPreviewData({ bindingId: item.id, cardElementId: item.cardNodeId }) } },
-      { id: item.connectorElementId, type: "arrow", ...connectorGeometry, start: { id: item.targetNodeId, type: elementTypeFor(item.targetNodeId) }, end: { id: item.cardNodeId, type: "rectangle" }, strokeColor: "#635bff", strokeStyle: "dashed", roughness: 0, startArrowhead: null, endArrowhead: "arrow", locked: true, customData: { dockyardRelationId: item.id, relationType: "component", ...createComponentBindingData({ bindingId: item.id, targetElementId: item.targetNodeId, cardElementId: item.cardNodeId, previewElementId: item.previewNodeId, sourceId: item.sourceId, componentKey: item.componentRefId }) } },
+      { id: item.connectorElementId, type: "arrow", ...connectorGeometry, start: { id: item.targetNodeId, type: elementTypeFor(item.targetNodeId) }, end: { id: item.cardNodeId, type: "rectangle" }, strokeColor: "#635bff", strokeStyle: "dashed", roughness: 0, startArrowhead: null, endArrowhead: "arrow", locked: true, customData: { dockyardRelationId: item.id, relationType: "component", ...createComponentBindingData({ bindingId: item.id, targetElementId: item.targetNodeId, cardElementId: item.cardNodeId, previewElementId: item.previewNodeId, sourceId: item.sourceId, componentKey: item.componentRefId, variantKey: item.variantKey }) } },
     ];
   });
   return [...interactionElements, ...componentElements];
@@ -472,6 +472,7 @@ function App() {
       componentRefId: story.id,
       sourceId: story.sourceId,
       componentName: story.name,
+      variantKey: definition.variants?.[0]?.key,
       targetLabel,
       connectorElementId: `component-link-${id}`,
       cardNodeId: `component-card-${id}`,
@@ -678,7 +679,7 @@ function App() {
     const source = STATIC_SOURCES.find((candidate) => candidate.id === item.sourceId);
     const definition = staticComponentByKey(item.componentRefId, item.sourceId);
     if (!preview || !source || !definition) return [];
-    const variant = definition.variants?.[0];
+    const variant = definition.variants?.find((candidate) => candidate.key === item.variantKey) || definition.variants?.[0];
     return [{
       id: definition.key,
       name: definition.name,

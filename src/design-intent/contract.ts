@@ -87,6 +87,8 @@ export function createSceneMetadata() {
   return { schemaVersion: 1 } as const;
 }
 
+export type DockyardSceneMetadata = ReturnType<typeof createSceneMetadata>;
+
 export function readDockyardRole(value: unknown): DockyardRole | null {
   if (!value || typeof value !== "object") return null;
   const role = (value as { dockyardRole?: unknown }).dockyardRole;

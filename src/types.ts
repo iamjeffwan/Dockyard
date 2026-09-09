@@ -1,4 +1,5 @@
 import type { LibraryItems } from "@excalidraw/excalidraw/types";
+import type { DockyardSceneMetadata } from "./design-intent/contract.js";
 
 export type Tool =
   | "select"
@@ -206,9 +207,7 @@ export type SceneData = {
   version: 2;
   source: string;
   elements: any[];
-  dockyard?: {
-    schemaVersion: 1;
-  };
+  dockyard?: DockyardSceneMetadata;
   appState?: Record<string, unknown>;
   files?: Record<string, any>;
 };
