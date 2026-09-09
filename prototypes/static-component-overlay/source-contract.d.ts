@@ -1,5 +1,5 @@
 export type StaticComponentVariant = { key: string; name: string; props?: Record<string, unknown> };
-export type StaticComponentDefinition = { key: string; name: string; categoryPath: string[]; defaultWidth: number; defaultHeight: number; variants?: StaticComponentVariant[] };
+export type StaticComponentDefinition = { key: string; name: string; categoryPath: string[]; defaultWidth: number; defaultHeight: number; layoutWidth?: number; previewLayout?: "compact" | "field"; variants?: StaticComponentVariant[] };
 export type StaticSourceDefinition = {
   schemaVersion: string;
   id: string;

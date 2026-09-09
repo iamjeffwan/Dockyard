@@ -60,11 +60,11 @@ export function defineStaticSource(source) {
 }
 
 const carbonComponents = [
-  { key: 'carbon-button', name: 'Button', categoryPath: ['actions', 'button'], defaultWidth: 160, defaultHeight: 48, variants: [{ key: 'default', name: 'Default' }, { key: 'danger', name: 'Danger', props: { kind: 'danger' } }] },
-  { key: 'carbon-date-picker', name: 'DatePicker', categoryPath: ['forms', 'date-picker'], defaultWidth: 288, defaultHeight: 64, variants: [{ key: 'default', name: 'Default' }] },
-  { key: 'carbon-checkbox', name: 'Checkbox', categoryPath: ['forms', 'checkbox'], defaultWidth: 140, defaultHeight: 24, variants: [{ key: 'default', name: 'Default' }] },
-  { key: 'carbon-dropdown', name: 'Dropdown', categoryPath: ['forms', 'dropdown'], defaultWidth: 300, defaultHeight: 64, variants: [{ key: 'default', name: 'Default' }] },
-  { key: 'carbon-toggle', name: 'Toggle', categoryPath: ['forms', 'toggle'], defaultWidth: 104, defaultHeight: 48, variants: [{ key: 'default', name: 'Default' }] },
+  { key: 'carbon-button', name: 'Button', categoryPath: ['actions', 'button'], defaultWidth: 160, defaultHeight: 48, previewLayout: 'compact', variants: [{ key: 'default', name: 'Default' }, { key: 'danger', name: 'Danger', props: { kind: 'danger' } }] },
+  { key: 'carbon-date-picker', name: 'DatePicker', categoryPath: ['forms', 'date-picker'], layoutWidth: 288, defaultWidth: 288, defaultHeight: 48, previewLayout: 'field', variants: [{ key: 'default', name: 'Default' }] },
+  { key: 'carbon-checkbox', name: 'Checkbox', categoryPath: ['forms', 'checkbox'], defaultWidth: 24, defaultHeight: 24, previewLayout: 'compact', variants: [{ key: 'default', name: 'Default' }] },
+  { key: 'carbon-dropdown', name: 'Dropdown', categoryPath: ['forms', 'dropdown'], layoutWidth: 300, defaultWidth: 300, defaultHeight: 48, previewLayout: 'field', variants: [{ key: 'default', name: 'Default' }] },
+  { key: 'carbon-toggle', name: 'Toggle', categoryPath: ['forms', 'toggle'], defaultWidth: 48, defaultHeight: 24, previewLayout: 'compact', variants: [{ key: 'default', name: 'Default' }] },
 ];
 
 export const BUILTIN_STATIC_SOURCES = Object.freeze([
@@ -78,7 +78,7 @@ export const BUILTIN_STATIC_SOURCES = Object.freeze([
     trustLevel: 'bundled',
     module: {
       name: 'carbon-static-module',
-      version: '0.1.0',
+      version: '0.1.4',
       entry: './dist/carbon-static-module.js',
       styles: ['./dist/dockyard.css'],
     },
@@ -97,7 +97,7 @@ const fixtureSource = (id, name) => defineStaticSource({
   testOnly: true,
   module: {
     name: `${id}-module`,
-    version: '0.1.0',
+    version: '0.1.4',
     entry: './dist/carbon-static-module.js',
     styles: ['./dist/dockyard.css'],
   },

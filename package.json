@@ -26,6 +26,7 @@
     "verify:electron-security": "node scripts/verify-electron-security.mjs",
     "verify:bar-position": "node scripts/verify-bar-position.mjs",
     "verify:canvas-e2e": "pnpm run build && node scripts/verify-canvas-e2e.mjs",
+    "verify:design-relations": "pnpm run build:static-components && node scripts/verify-design-relations-prototype.mjs",
     "prototype:overlay:electron": "electron prototypes/excalidraw-component-overlay/electron-main.cjs",
     "prototype:page-wireframe": "node prototypes/page-wireframe-generation/generate.mjs",
     "prototype:page-wireframe:evaluate": "node prototypes/page-wireframe-generation/evaluation/generate.mjs",

@@ -9,8 +9,31 @@ body,
 .static-overlay-stage { position: absolute; inset: 0; overflow: visible; }
 .static-overlay-stage { transform-origin: 0 0; }
 .component-surface { position: absolute; transform-origin: center; overflow: visible; }
-.component-content-scaler { position: absolute; inset: 0 auto auto 0; transform-origin: 0 0; }
-.component-natural-content { display: inline-block; width: max-content; }
+.component-reference-viewport { position: absolute; overflow: hidden; background: transparent; pointer-events: auto; }
+.component-reference-viewport.is-interactive { overflow: visible; }
+.component-reference-viewport .component-surface { position: absolute; }
+.dockyard-reference-popup-host { position: fixed; z-index: 99999; transform-origin: top left; pointer-events: none; }
+.dockyard-reference-popup-host .flatpickr-calendar { position: absolute; inset: 0 auto auto 0 !important; margin: 0; pointer-events: auto; }
+.component-content-layout { position: absolute; inset: 0; }
+.component-natural-content { display: inline-block; }
+.component-preview-root--compact { width: max-content; }
+.component-preview-root--field { display: block; }
+.component-preview-root--field > .cds--dropdown__wrapper,
+.component-preview-root--field .cds--date-picker,
+.component-preview-root--field .cds--date-picker-container,
+.component-preview-root--field .cds--date-picker-input__wrapper,
+.component-preview-root--field .cds--date-picker.cds--date-picker--single .cds--date-picker__input {
+  inline-size: 100% !important;
+  max-inline-size: none !important;
+}
+.component-preview-root--field .cds--date-picker-input__wrapper > span {
+  display: block;
+  inline-size: 100% !important;
+}
+.component-surface[data-size-mode="manual"][data-component-key="carbon-button"] .component-natural-content,
+.component-surface[data-component-key="carbon-button"] [data-resizing="true"] .component-natural-content { height: 100%; }
+.component-surface[data-size-mode="manual"] .component-natural-content > .cds--btn,
+[data-resizing="true"] .component-natural-content > .cds--btn { width: 100%; height: 100%; max-width: none; }
 .component-surface.is-selected { outline: 1px solid #0f62fe; outline-offset: 3px; }
 .component-sequence { position: absolute; top: -9px; left: -11px; z-index: 5; display: grid; min-width: 22px; height: 18px; place-items: center; padding: 0 5px; border: 0; border-radius: 9px; background: #da1e28; color: #fff; font: 700 11px/1 sans-serif; cursor: grab; pointer-events: auto; touch-action: none; }
 .component-sequence:active { cursor: grabbing; }

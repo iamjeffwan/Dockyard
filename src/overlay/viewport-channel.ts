@@ -13,49 +13,23 @@ export interface ViewportChannel {
   dispose(): void;
 }
 
-type FrameHandle =
-  | { kind: "raf"; id: number }
-  | { kind: "timeout"; id: ReturnType<typeof globalThis.setTimeout> };
-
-function scheduleFrame(callback: () => void) {
-  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-    return { kind: "raf" as const, id: window.requestAnimationFrame(callback) };
-  }
-  return { kind: "timeout" as const, id: globalThis.setTimeout(callback, 16) };
-}
-
-function cancelFrame(frame: FrameHandle) {
-  if (frame.kind === "raf" && typeof window !== "undefined") {
-    window.cancelAnimationFrame(frame.id);
-  } else {
-    globalThis.clearTimeout(frame.id);
-  }
-}
-
 export function createViewportChannel(initial: ViewportSnapshot): ViewportChannel {
   let latest = initial;
-  let frame: FrameHandle | null = null;
   const listeners = new Set<() => void>();
-
-  const flush = () => {
-    frame = null;
-    listeners.forEach((listener) => listener());
-  };
 
   return {
     getSnapshot: () => latest,
     publish: (snapshot) => {
       latest = snapshot;
-      if (frame) return;
-      frame = scheduleFrame(flush);
+      // iframe 运行页需要与原生画板使用同一帧视口数据；
+      // 视觉状态由订阅方自行合并，通道本身不再额外等待一帧。
+      listeners.forEach((listener) => listener());
     },
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     dispose: () => {
-      if (frame) cancelFrame(frame);
-      frame = null;
       listeners.clear();
     },
   };

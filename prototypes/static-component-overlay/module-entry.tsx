@@ -26,6 +26,17 @@ type StaticInstance = {
   height?: number;
   naturalWidth?: number;
   naturalHeight?: number;
+  sizeMode?: "auto" | "manual";
+  presentation?: {
+    kind: 'reference-card';
+    viewportX: number;
+    viewportY: number;
+    viewportWidth: number;
+    viewportHeight: number;
+    contentInset?: number;
+    fit: 'contain';
+  };
+  interactive?: boolean;
   rotation?: number;
   sequence?: string;
   variantKey?: string;
@@ -96,7 +107,7 @@ function Demo() {
   useEffect(() => {
     if (mode !== 'component') return;
     const forwardNativeToolShortcut = (event: KeyboardEvent) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || isEditableTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || (event.key !== 'Escape' && isEditableTarget(event.target))) return;
       postOverlayMessage(SOURCE_ID, OverlayEvent.nativeToolShortcut, { key: event.key });
     };
     window.addEventListener('keydown', forwardNativeToolShortcut, true);
@@ -134,6 +145,7 @@ function Demo() {
             mode={mode}
             zoom={viewport.zoom}
             selected={selectedId === instance.id}
+            interactive={Boolean(instance.interactive)}
             onSelect={() => setSelectedId(instance.id)}
           />
         ))}
@@ -142,10 +154,16 @@ function Demo() {
   );
 }
 
-function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: StaticInstance; mode: OverlayMode; zoom: number; selected: boolean; onSelect: () => void }) {
+function InstanceView({ instance, mode, zoom, selected, interactive, onSelect }: { instance: StaticInstance; mode: OverlayMode; zoom: number; selected: boolean; interactive: boolean; onSelect: () => void }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const scalerRef = useRef<HTMLDivElement>(null);
+  const layoutRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const datePopupRef = useRef<HTMLElement | null>(null);
+  const datePopupHostRef = useRef<HTMLDivElement | null>(null);
+  const definition = SOURCE_REGISTRY.sourceById.get(SOURCE_ID)!.components.find(item => item.key === instance.componentKey)!;
+  const autoSize = instance.sizeMode === "auto";
+  const referenceCard = instance.presentation?.kind === 'reference-card' ? instance.presentation : null;
+  const previewLayout = definition.previewLayout || 'compact';
   const committedGeometry: ComponentGeometry = {
     x: instance.x ?? 0,
     y: instance.y ?? 0,
@@ -186,14 +204,11 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
 
   const applyGeometry = (next: ComponentGeometry) => {
     const surface = surfaceRef.current;
-    const scaler = scalerRef.current;
-    if (!surface || !scaler) return;
-    const naturalWidth = naturalRef.current.width || 1;
-    const naturalHeight = naturalRef.current.height || 1;
+    if (!surface) return;
     surface.style.width = `${next.width}px`;
     surface.style.height = `${next.height}px`;
     surface.style.transform = `translate3d(${next.x}px, ${next.y}px, 0) rotate(${next.rotation}rad)`;
-    scaler.style.transform = `scale(${next.width / naturalWidth}, ${next.height / naturalHeight})`;
+
   };
 
   const scheduleGeometry = (next: ComponentGeometry) => {
@@ -211,25 +226,34 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
     geometryRef.current = next;
     applyGeometry(next);
   };
-  const reportTransform = () => {
+  const reportTransform = (kind: TransformKind) => {
     const current = geometryRef.current;
-    send(OverlayEvent.componentDrop, instance.id, surfaceRef.current, { ...current, naturalWidth: natural.width, naturalHeight: natural.height });
+    const measured = { width: contentRef.current?.offsetWidth || 1, height: contentRef.current?.offsetHeight || 1 };
+    naturalRef.current = measured;
+    setNatural(measured);
+    send(OverlayEvent.componentDrop, instance.id, surfaceRef.current, {
+      ...current, naturalWidth: measured.width, naturalHeight: measured.height, transformKind: kind,
+    });
   };
 
   useEffect(() => {
     const node = contentRef.current;
     if (!node) return;
     const measure = () => {
+      if (dragRef.current) return;
       const width = Math.max(1, node.offsetWidth);
       const height = Math.max(1, node.offsetHeight);
       setNatural((current) => current.width === width && current.height === height ? current : { width, height });
-      send(OverlayEvent.componentBounds, instance.id, surfaceRef.current, { naturalWidth: width, naturalHeight: height });
+      send(OverlayEvent.componentBounds, instance.id, surfaceRef.current, {
+        naturalWidth: width,
+        naturalHeight: height,
+      });
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [instance.id]);
+  }, [instance.id, referenceCard?.viewportWidth, referenceCard?.viewportHeight]);
 
   useEffect(() => {
     const receive = (event: MessageEvent) => {
@@ -242,14 +266,76 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
 
   const width = committedGeometry.width || natural.width || 1;
   const height = committedGeometry.height || natural.height || 1;
-  const scaleX = natural.width ? width / natural.width : 1;
-  const scaleY = natural.height ? height / natural.height : 1;
+  const referenceInset = referenceCard ? Math.max(0, Number(referenceCard.contentInset) || 0) : 0;
+  const referenceContentWidth = referenceCard ? Math.max(1, referenceCard.viewportWidth - referenceInset * 2) : 1;
+  const referenceContentHeight = referenceCard ? Math.max(1, referenceCard.viewportHeight - referenceInset * 2) : 1;
+  const referenceScale = referenceCard
+    ? Math.min(1, referenceContentWidth / Math.max(1, natural.width), referenceContentHeight / Math.max(1, natural.height))
+    : 1;
+  const referenceOffsetX = referenceCard ? referenceInset + (referenceContentWidth - natural.width * referenceScale) / 2 : 0;
+  const referenceOffsetY = referenceCard ? referenceInset + (referenceContentHeight - natural.height * referenceScale) / 2 : 0;
+
+  const positionReferenceDatePopup = (calendar: HTMLElement) => {
+    if (!referenceCard) return;
+    const input = surfaceRef.current?.querySelector<HTMLInputElement>('.cds--date-picker__input');
+    if (!input) return;
+    let host = datePopupHostRef.current;
+    if (!host) {
+      host = document.createElement('div');
+      host.className = 'dockyard-reference-popup-host';
+      document.body.append(host);
+      datePopupHostRef.current = host;
+    }
+    if (calendar.parentElement !== host) host.append(calendar);
+    const inputRect = input.getBoundingClientRect();
+    const popupScale = referenceScale * zoom;
+    const popupWidth = calendar.offsetWidth * popupScale;
+    const popupHeight = calendar.offsetHeight * popupScale;
+    const viewportPadding = 6;
+    const left = Math.min(Math.max(viewportPadding, inputRect.left), Math.max(viewportPadding, window.innerWidth - popupWidth - viewportPadding));
+    const below = inputRect.bottom + 2;
+    const above = inputRect.top - popupHeight - 2;
+    const top = below + popupHeight <= window.innerHeight - viewportPadding ? below : Math.max(viewportPadding, above);
+    calendar.dataset.dockyardReferencePopup = instance.id;
+    host.style.left = `${left}px`;
+    host.style.top = `${top}px`;
+    host.style.width = `${calendar.offsetWidth}px`;
+    host.style.height = `${calendar.offsetHeight}px`;
+    host.style.transform = `scale(${popupScale})`;
+    calendar.style.left = '0';
+    calendar.style.top = '0';
+    calendar.style.right = 'auto';
+  };
+
+  useEffect(() => () => datePopupHostRef.current?.remove(), []);
+
+  useEffect(() => {
+    const calendar = datePopupRef.current;
+    if (!calendar) return;
+    if (mode !== 'component' || !interactive) {
+      calendar.classList.remove('open');
+      datePopupRef.current = null;
+      return;
+    }
+    positionReferenceDatePopup(calendar);
+  }, [interactive, mode, referenceScale, zoom]);
+
+  useEffect(() => {
+    if (mode === 'component' && interactive) return;
+    const toggle = surfaceRef.current?.querySelector<HTMLElement>('[aria-expanded="true"]');
+    toggle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+  }, [interactive, mode]);
+
 
   const begin = (event: React.PointerEvent, kind: TransformKind) => {
-    if (mode !== 'component') return;
+    if (mode !== 'component' || referenceCard) return;
     event.preventDefault();
     event.stopPropagation();
     onSelect();
+    if (kind === 'resize' && contentRef.current && layoutRef.current) {
+      contentRef.current.style.width = '100%';
+      layoutRef.current.dataset.resizing = 'true';
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     const initial = { ...geometryRef.current, width, height };
     const surfaceRect = surfaceRef.current?.getBoundingClientRect();
@@ -274,40 +360,67 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
     if (!drag) return;
     dragRef.current = undefined;
     flushGeometry(drag.current);
-    reportTransform();
+    reportTransform(drag.kind);
   };
   const cancel = () => {
     const drag = dragRef.current;
     if (!drag) return;
     dragRef.current = undefined;
     flushGeometry(drag.initial);
+    if (contentRef.current && autoSize) contentRef.current.style.width = definition.layoutWidth ? `${definition.layoutWidth}px` : 'max-content';
+    if (layoutRef.current) delete layoutRef.current.dataset.resizing;
   };
 
   const common = { component: instance.componentKey };
   const child = instance.componentKey === 'carbon-date-picker'
-    ? <DatePicker dateFormat="Y-m-d" datePickerType="single" value={date} onChange={(_dates: Date[], next: string) => { setDate(next); send('date-change', instance.id, surfaceRef.current, { ...common, date: next }); }}><DatePickerInput id={`date-${instance.id}`} labelText="Date Picker" placeholder="yyyy-mm-dd" /></DatePicker>
+    ? <DatePicker
+      dateFormat="Y-m-d"
+      datePickerType="single"
+      value={date}
+      onOpen={(_dates, _value, calendar) => {
+        datePopupRef.current = calendar.calendarContainer;
+        positionReferenceDatePopup(calendar.calendarContainer);
+        requestAnimationFrame(() => positionReferenceDatePopup(calendar.calendarContainer));
+      }}
+      onClose={() => { datePopupRef.current = null; }}
+      onChange={(_dates: Date[], next: string) => { setDate(next); send('date-change', instance.id, surfaceRef.current, { ...common, date: next }); }}
+    ><DatePickerInput id={`date-${instance.id}`} labelText="Date Picker" placeholder="yyyy-mm-dd" /></DatePicker>
     : instance.componentKey === 'carbon-checkbox'
       ? <Checkbox id={`checkbox-${instance.id}`} labelText="Checkbox" checked={checked} onChange={(_, data) => { setChecked(data.checked); send('checkbox-change', instance.id, surfaceRef.current, { ...common, checked: data.checked }); }} />
       : instance.componentKey === 'carbon-dropdown'
-        ? <Dropdown id={`dropdown-${instance.id}`} titleText="Dropdown" label="Choose an option" items={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }]} itemToString={(item) => item?.text || ''} selectedItem={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }].find((item) => item.id === choice)} onChange={({ selectedItem }) => { if (selectedItem) { setChoice(selectedItem.id); send('dropdown-change', instance.id, surfaceRef.current, { ...common, choice: selectedItem.id }); } }} />
+        ? <Dropdown id={`dropdown-${instance.id}`} titleText="Dropdown" aria-label="Dropdown" label="Choose an option" items={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }]} itemToString={(item) => item?.text || ''} selectedItem={[{ id: 'one', text: 'Option One' }, { id: 'two', text: 'Option Two' }].find((item) => item.id === choice)} onChange={({ selectedItem }) => { if (selectedItem) { setChoice(selectedItem.id); send('dropdown-change', instance.id, surfaceRef.current, { ...common, choice: selectedItem.id }); } }} />
         : instance.componentKey === 'carbon-toggle'
           ? <Toggle id={`toggle-${instance.id}`} labelText="Toggle" toggled={toggled} onToggle={(next) => { setToggled(next); send('toggle-change', instance.id, surfaceRef.current, { ...common, toggled: next }); }} />
           : instance.componentKey === 'carbon-button'
             ? <Button kind={(instance.props?.kind || (instance.variantKey === 'danger' ? 'danger' : 'primary')) as 'primary'} onClick={(event) => { const next = clicks + 1; setClicks(next); send(OverlayEvent.componentClick, instance.id, event.currentTarget, { ...common, clicks: next }); }}>Carbon Button ({clicks})</Button>
             : null;
 
-  return (
+  const surface = (
     <div
       ref={surfaceRef}
       data-component-id={instance.id}
       data-component-key={instance.componentKey}
       data-source-id={instance.sourceId}
+      data-size-mode={autoSize ? "auto" : "manual"}
       className={`component-surface${selected ? ' is-selected' : ''}`}
-      style={{ width, height, transform: `translate3d(${committedGeometry.x}px, ${committedGeometry.y}px, 0) rotate(${committedGeometry.rotation}rad)` }}
-      onPointerDownCapture={() => { if (mode === 'component') onSelect(); }}
+      style={{
+        width,
+        height,
+        transformOrigin: referenceCard ? '0 0' : 'center',
+        transform: referenceCard
+          ? `translate3d(${referenceOffsetX}px, ${referenceOffsetY}px, 0) scale(${referenceScale})`
+          : `translate3d(${committedGeometry.x}px, ${committedGeometry.y}px, 0) rotate(${committedGeometry.rotation}rad)`,
+      }}
+      onPointerDownCapture={() => { if (mode === 'component' && !referenceCard) onSelect(); }}
     >
-      <div ref={scalerRef} className="component-content-scaler" style={{ width: natural.width || 'max-content', height: natural.height || 'max-content', transform: `scale(${scaleX}, ${scaleY})` }}>
-        <div ref={contentRef} className="component-natural-content">{child}</div>
+      <div ref={layoutRef} className="component-content-layout">
+        <div
+          ref={contentRef}
+          data-dockyard-preview-root
+          data-preview-layout={previewLayout}
+          className={`component-natural-content component-preview-root component-preview-root--${previewLayout}`}
+          style={{ width: previewLayout === 'field' ? definition.layoutWidth || 'max-content' : autoSize ? definition.layoutWidth || 'max-content' : 'max-content' }}
+        >{child}</div>
       </div>
       {instance.sequence && (
         <button
@@ -323,12 +436,23 @@ function InstanceView({ instance, mode, zoom, selected, onSelect }: { instance: 
           {instance.sequence}
         </button>
       )}
-      {selected && mode === 'component' && <>
+      {selected && mode === 'component' && !referenceCard && <>
         <button type="button" aria-label="旋转组件" className="component-rotate-handle" onPointerDown={(event) => begin(event, 'rotate')} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onLostPointerCapture={finish} />
-        <button type="button" aria-label="缩放组件" className="component-resize-handle" onPointerDown={(event) => begin(event, 'resize')} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onLostPointerCapture={finish} />
+        <button type="button" aria-label="调整组件尺寸" className="component-resize-handle" onPointerDown={(event) => begin(event, 'resize')} onPointerMove={move} onPointerUp={finish} onPointerCancel={cancel} onLostPointerCapture={finish} />
       </>}
     </div>
   );
+  if (!referenceCard) return surface;
+  return <div
+    className={`component-reference-viewport${interactive ? ' is-interactive' : ''}`}
+    data-component-id={instance.id}
+    style={{
+      left: referenceCard.viewportX,
+      top: referenceCard.viewportY,
+      width: referenceCard.viewportWidth,
+      height: referenceCard.viewportHeight,
+    }}
+  >{surface}</div>;
 }
 
 createRoot(document.getElementById('root')!).render(<Demo />);

@@ -23,8 +23,12 @@
       "id": "C1",
       "targetNodeId": "node-search-slot",
       "componentRefId": "carbon-dropdown",
+      "sourceId": "carbon-react",
+      "componentName": "Dropdown",
       "connectorElementId": "component-link-C1",
       "cardNodeId": "component-card-C1",
+      "previewNodeId": "component-preview-C1",
+      "status": "confirmed",
       "usageIntent": "在该位置使用所选组件",
       "customization": "开发时根据布局适配，不进行非等比缩放"
     }
