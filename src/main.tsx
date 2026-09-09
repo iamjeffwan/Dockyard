@@ -50,6 +50,7 @@ import { nativeExcalidrawToolForShortcut } from "./excalidraw/component-tool-sho
 import { createDeliveryModule } from "./delivery/module";
 import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
 import { useWorkspace } from "./workspace/useWorkspace";
+import { serializeScene } from "./design-intent/export.js";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
 } from "./excalidraw-library-host";
@@ -72,12 +73,14 @@ function CanvasMainMenu({
   onChooseArtwork,
   onSave,
   onExportImage,
+  onExportNative,
   onComplete,
 }: {
   hasArtwork: boolean;
   onChooseArtwork: () => void;
   onSave: () => void;
   onExportImage: () => void;
+  onExportNative: (kind: "enhanced" | "native") => void;
   onComplete: () => void;
 }) {
   return (
@@ -86,6 +89,8 @@ function CanvasMainMenu({
       <MainMenu.Separator />
       <MainMenu.Item icon={<Save size={16} />} onSelect={onSave} disabled={!hasArtwork}>保存到 Dockyard</MainMenu.Item>
       <MainMenu.Item icon={<ImagePlus size={16} />} onSelect={onExportImage} disabled={!hasArtwork}>导出图片</MainMenu.Item>
+      <MainMenu.Item icon={<FileCode2 size={16} />} onSelect={() => onExportNative("enhanced")} disabled={!hasArtwork}>导出增强版画稿</MainMenu.Item>
+      <MainMenu.Item icon={<FileCode2 size={16} />} onSelect={() => onExportNative("native")} disabled={!hasArtwork}>导出普通版画稿</MainMenu.Item>
       <MainMenu.Item icon={<Check size={16} />} onSelect={onComplete} disabled={!hasArtwork}>完成并记录</MainMenu.Item>
       <MainMenu.Separator />
       <MainMenu.DefaultItems.SearchMenu />
@@ -585,6 +590,17 @@ function AnnotatorView() {
     if (!result.ok) throw new Error(result.error);
     setStatus("图片已复制");
   };
+  const exportNativeScene = (kind: "enhanced" | "native") => {
+    if (!artwork) return;
+    const value = serializeScene(artwork.scene, kind);
+    const blob = new Blob([value], { type: "application/json;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${artwork.name}${kind === "enhanced" ? ".dockyard" : ""}.excalidraw`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setStatus(kind === "enhanced" ? "增强版画稿已导出" : "普通版画稿已导出");
+  };
   const removeComponent = (instanceId: string) => {
     if (!artwork || !window.confirm("确定移除这个组件吗？")) return;
     updateArtwork((current) => ({
@@ -841,6 +857,7 @@ function AnnotatorView() {
                 onChooseArtwork={() => setArtworkPickerOpen(true)}
                 onSave={() => void saveNow()}
                 onExportImage={() => void openExportImage()}
+                onExportNative={exportNativeScene}
                 onComplete={() => void completeCurrentArtwork()}
               />
             </>
