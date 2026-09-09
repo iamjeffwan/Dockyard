@@ -83,7 +83,7 @@ test("增强版保留关系数据，普通版移除 Dockyard 字段", () => {
 });
 
 test("导入增强画稿校验组件关联引用并保留版本", () => {
-  const result = importScene({ type: "excalidraw", version: 2, source: "test", dockyard: { schemaVersion: 1 }, elements: [{ id: "link", customData: { dockyardRole: "component-binding", targetElementId: "missing", cardElementId: "card", previewElementId: "preview" } }, { id: "card" }, { id: "preview" }] });
+  const result = importScene({ type: "excalidraw", version: 2, source: "test", dockyard: { schemaVersion: 1 }, elements: [{ id: "link", customData: { dockyardRole: "component-binding", bindingId: "C1", targetElementId: "missing", cardElementId: "card", previewElementId: "preview", sourceId: "carbon-react", componentKey: "carbon-button" } }, { id: "card" }, { id: "preview" }] });
   assert.equal(result.isEnhanced, true);
   assert.deepEqual(result.invalidReferences, ["missing"]);
   assert.deepEqual(result.scene.dockyard, { schemaVersion: 1 });
