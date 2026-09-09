@@ -5,6 +5,15 @@ export type SceneImportResult = {
   isEnhanced: boolean;
   warning?: string;
   invalidReferences: string[];
+  componentBindings: Array<{
+    bindingId: string;
+    targetElementId: string;
+    cardElementId: string;
+    previewElementId: string;
+    sourceId: string;
+    componentKey: string;
+    variantKey?: string;
+  }>;
 };
 
 export function importScene(value: unknown): SceneImportResult {
@@ -14,11 +23,12 @@ export function importScene(value: unknown): SceneImportResult {
   const elements = parsed.elements;
   const ids = new Set(elements.map((element) => element?.id).filter((id): id is string => typeof id === "string"));
   const enhanced = parsed.dockyard?.schemaVersion === 1;
-  const invalidReferences = elements.flatMap((element) => {
+  const componentBindings = elements.flatMap((element) => {
     const data = element?.customData;
-    if (!data || data.dockyardRole !== "component-binding") return [];
-    return [data.targetElementId, data.cardElementId, data.previewElementId].filter((id): id is string => typeof id === "string" && !ids.has(id));
+    if (!data || data.dockyardRole !== "component-binding" || typeof data.bindingId !== "string" || typeof data.targetElementId !== "string" || typeof data.cardElementId !== "string" || typeof data.previewElementId !== "string" || typeof data.sourceId !== "string" || typeof data.componentKey !== "string") return [];
+    return [{ bindingId: data.bindingId, targetElementId: data.targetElementId, cardElementId: data.cardElementId, previewElementId: data.previewElementId, sourceId: data.sourceId, componentKey: data.componentKey, ...(typeof data.variantKey === "string" ? { variantKey: data.variantKey } : {}) }];
   });
+  const invalidReferences = componentBindings.flatMap((binding) => [binding.targetElementId, binding.cardElementId, binding.previewElementId].filter((id) => !ids.has(id)));
   return {
     scene: {
       type: "excalidraw",
@@ -32,5 +42,6 @@ export function importScene(value: unknown): SceneImportResult {
     isEnhanced: enhanced,
     warning: parsed.dockyard && !enhanced ? "Dockyard 数据结构版本不受支持，已按普通画稿打开" : parsed.dockyard ? undefined : "这是普通画稿，未发现 Dockyard 关系数据",
     invalidReferences,
+    componentBindings,
   };
 }

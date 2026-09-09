@@ -52,6 +52,7 @@ import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportIma
 import { useWorkspace } from "./workspace/useWorkspace";
 import { serializeScene } from "./design-intent/export.js";
 import { importScene } from "./design-intent/import.js";
+import { staticSourceById } from "./static-components/registry.js";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
 } from "./excalidraw-library-host";
@@ -230,7 +231,17 @@ function importArtwork(
       try {
         const imported = importScene(JSON.parse(text));
         const scene: SceneData = imported.scene;
-        const item: Artwork = { id: uid("artwork"), name: artworkName(workspace.artworks, file.name), status: "draft", createdAt: now(), updatedAt: now(), source: null, scene, annotations: [], components: [], notes: "" };
+        const elementsById = new Map(scene.elements.map((element) => [element.id, element]));
+        const components: ComponentInstance[] = imported.componentBindings.flatMap((binding) => {
+          const source = staticSourceById(binding.sourceId);
+          const definition = source && staticComponentByKey(binding.componentKey, binding.sourceId);
+          const card = elementsById.get(binding.cardElementId);
+          const preview = elementsById.get(binding.previewElementId);
+          if (!source || !definition || !card || !preview) return [];
+          const variant = definition.variants?.find((item) => item.key === binding.variantKey) || definition.variants?.[0];
+          return [{ id: definition.key, name: definition.name, library: source.name, previewKind: "reference", instanceId: `reference-runtime-${binding.bindingId}`, elementId: binding.previewElementId, status: "confirmed", sourceLibraryId: source.id, componentKey: definition.key, staticModule: { sourceId: source.id, componentKey: definition.key, protocolVersion: source.protocolVersion, version: source.module.version }, variantKey: variant?.key, props: variant?.props, x: preview.x, y: preview.y, width: definition.defaultWidth, height: definition.defaultHeight, naturalWidth: definition.defaultWidth, naturalHeight: definition.defaultHeight, sizeMode: "auto", rotation: 0, presentation: { kind: "reference-card", viewportX: preview.x, viewportY: preview.y, viewportWidth: preview.width, viewportHeight: preview.height, contentInset: 12, fit: "contain" } }];
+        });
+        const item: Artwork = { id: uid("artwork"), name: artworkName(workspace.artworks, file.name), status: "draft", createdAt: now(), updatedAt: now(), source: null, scene, components, annotations: [], notes: "" };
         update((current) => ({ ...current, currentArtworkId: item.id, artworks: [...current.artworks, item] }));
         if (imported.warning || imported.invalidReferences.length) window.alert(imported.invalidReferences.length ? `画稿已打开，但有 ${imported.invalidReferences.length} 个关系引用失效` : imported.warning);
         if (openAfterImport) openPanel("annotator");
