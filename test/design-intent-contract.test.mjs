@@ -12,6 +12,7 @@ import {
   readDockyardRole,
 } from "../.tmp/design-intent-contract/contract.js";
 import { createEnhancedScene, createNativeScene, serializeScene } from "../.tmp/design-intent-contract/design-intent/export.js";
+import { importScene } from "../.tmp/design-intent-contract/design-intent/import.js";
 
 test("设计关系使用专用标记，普通元素不被误认", () => {
   const node = createDesignNodeData({
@@ -79,4 +80,11 @@ test("增强版保留关系数据，普通版移除 Dockyard 字段", () => {
   assert.equal(native.elements[0].customData.relationId, undefined);
   assert.equal(native.elements[0].customData.userTag, "keep");
   assert.match(serializeScene(enhanced, "enhanced"), /"schemaVersion": 1/);
+});
+
+test("导入增强画稿校验组件关联引用并保留版本", () => {
+  const result = importScene({ type: "excalidraw", version: 2, source: "test", dockyard: { schemaVersion: 1 }, elements: [{ id: "link", customData: { dockyardRole: "component-binding", targetElementId: "missing", cardElementId: "card", previewElementId: "preview" } }, { id: "card" }, { id: "preview" }] });
+  assert.equal(result.isEnhanced, true);
+  assert.deepEqual(result.invalidReferences, ["missing"]);
+  assert.deepEqual(result.scene.dockyard, { schemaVersion: 1 });
 });

@@ -51,6 +51,7 @@ import { createDeliveryModule } from "./delivery/module";
 import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
 import { useWorkspace } from "./workspace/useWorkspace";
 import { serializeScene } from "./design-intent/export.js";
+import { importScene } from "./design-intent/import.js";
 import {
   EXCALIDRAW_ANNOTATOR_WINDOW_NAME,
 } from "./excalidraw-library-host";
@@ -227,11 +228,11 @@ function importArtwork(
   if (isNative) {
     void file.text().then((text) => {
       try {
-        const parsed = JSON.parse(text) as Partial<SceneData>;
-        if (parsed.type !== "excalidraw" || parsed.version !== 2 || !Array.isArray(parsed.elements)) throw new Error("不是有效的 Excalidraw v2 图稿");
-        const scene: SceneData = { type: "excalidraw", version: 2, source: String(parsed.source || "imported-native"), elements: parsed.elements, dockyard: parsed.dockyard?.schemaVersion === 1 ? { schemaVersion: 1 } : undefined, appState: parsed.appState || { viewBackgroundColor: "#ffffff" }, files: parsed.files || {} };
+        const imported = importScene(JSON.parse(text));
+        const scene: SceneData = imported.scene;
         const item: Artwork = { id: uid("artwork"), name: artworkName(workspace.artworks, file.name), status: "draft", createdAt: now(), updatedAt: now(), source: null, scene, annotations: [], components: [], notes: "" };
         update((current) => ({ ...current, currentArtworkId: item.id, artworks: [...current.artworks, item] }));
+        if (imported.warning || imported.invalidReferences.length) window.alert(imported.invalidReferences.length ? `画稿已打开，但有 ${imported.invalidReferences.length} 个关系引用失效` : imported.warning);
         if (openAfterImport) openPanel("annotator");
       } catch (error) { window.alert(error instanceof Error ? error.message : "原生图稿无法导入"); }
     });
