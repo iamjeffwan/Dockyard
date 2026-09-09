@@ -1,6 +1,6 @@
 import type { SceneData } from "../types.js";
 
-const DOCKYARD_KEYS = new Set(["dockyard", "dockyardRole", "dockyardType", "dockyardNodeId", "dockyardRelationId", "relationType", "bindingId", "componentRefId", "sourceId", "componentKey", "variantKey", "targetElementId", "cardElementId", "previewElementId", "status", "role"]);
+const DOCKYARD_KEYS = new Set(["dockyard", "dockyardRole", "dockyardType", "dockyardNodeId", "dockyardRelationId", "relationType", "relationId", "nodeId", "nodeRole", "bindingId", "componentRefId", "sourceId", "componentKey", "variantKey", "targetElementId", "cardElementId", "previewElementId", "status", "role"]);
 
 export function createEnhancedScene(scene: SceneData): SceneData {
   return { ...scene, dockyard: { schemaVersion: 1 }, elements: scene.elements.map((element) => ({ ...element, customData: element.customData ? { ...element.customData } : undefined })) };
