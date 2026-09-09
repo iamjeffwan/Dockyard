@@ -206,6 +206,9 @@ export type SceneData = {
   version: 2;
   source: string;
   elements: any[];
+  dockyard?: {
+    schemaVersion: 1;
+  };
   appState?: Record<string, unknown>;
   files?: Record<string, any>;
 };

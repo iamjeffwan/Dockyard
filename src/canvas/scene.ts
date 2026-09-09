@@ -1,4 +1,5 @@
 import type { SceneData, SourceAsset } from "../types";
+import { createSceneMetadata } from "../design-intent/contract.js";
 
 const uid = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
@@ -52,6 +53,7 @@ export const emptyScene = (): SceneData => ({
   version: 2,
   source: "https://excalidraw.com",
   elements: [],
+  dockyard: createSceneMetadata(),
   appState: { viewBackgroundColor: "#ffffff" },
   files: {},
 });

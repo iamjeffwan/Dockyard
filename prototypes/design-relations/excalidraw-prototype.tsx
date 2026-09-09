@@ -11,6 +11,15 @@ import { PrototypeOverlay } from "../../src/overlay/index.js";
 import { createViewportChannel, viewportFromAppState } from "../../src/overlay/viewport-channel.js";
 import { staticComponentByKey, STATIC_SOURCES } from "../../src/static-components/registry.js";
 import type { ComponentInstance, StorybookStory } from "../../src/types.js";
+import {
+  DockyardRole,
+  createComponentBindingData,
+  createComponentCardData,
+  createComponentPreviewData,
+  createDesignNodeData,
+  createInteractionData,
+  createSceneMetadata,
+} from "../../src/design-intent/contract.js";
 import "@excalidraw/excalidraw/index.css";
 import "../../src/carbon.scss";
 import "../../src/styles.css";
@@ -59,16 +68,16 @@ const componentCatalog = {
 const baseSkeleton: any[] = [
   { id: "prototype-title", type: "text", x: 90, y: 65, text: "患者信息管理 · 原型方案", fontSize: 26, strokeColor: "#20242a" },
   { id: "prototype-note", type: "text", x: 90, y: 104, text: "使用顶部新增工具，直接在原生画板元素之间建立关系", fontSize: 15, strokeColor: "#69707c" },
-  { id: "node-main-screen", type: "rectangle", x: 160, y: 280, width: 760, height: 470, strokeColor: "#343a40", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, customData: { dockyardNodeId: "node-main-screen", role: "screen" } },
+  { id: "node-main-screen", type: "rectangle", x: 160, y: 280, width: 760, height: 470, strokeColor: "#343a40", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, customData: { dockyardNodeId: "node-main-screen", role: "screen", ...createDesignNodeData({ nodeId: "node-main-screen", nodeRole: "screen", label: "患者信息管理主页面" }) } },
   { id: "main-title", type: "text", x: 185, y: 302, text: "患者信息管理", fontSize: 22, strokeColor: "#20242a" },
   { id: "main-top-line", type: "line", x: 160, y: 340, width: 760, height: 0, points: [[0, 0], [760, 0]], roughness: 0 },
   { id: "main-side-line", type: "line", x: 370, y: 340, width: 0, height: 410, points: [[0, 0], [0, 410]], roughness: 0 },
-  { id: "node-nav-followup", type: "rectangle", x: 610, y: 294, width: 96, height: 36, strokeColor: "transparent", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: ["group-nav-followup"], customData: { dockyardNodeId: "node-nav-followup", role: "trigger" } },
+  { id: "node-nav-followup", type: "rectangle", x: 610, y: 294, width: 96, height: 36, strokeColor: "transparent", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: ["group-nav-followup"], customData: { dockyardNodeId: "node-nav-followup", role: "trigger", ...createDesignNodeData({ nodeId: "node-nav-followup", nodeRole: "trigger", label: "回访菜单" }) } },
   { id: "nav-followup-text", type: "text", x: 624, y: 302, text: "回访⌄", fontSize: 17, groupIds: ["group-nav-followup"] },
-  { id: "node-nav-system", type: "rectangle", x: 726, y: 294, width: 122, height: 36, strokeColor: "transparent", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: ["group-nav-system"], customData: { dockyardNodeId: "node-nav-system", role: "trigger" } },
+  { id: "node-nav-system", type: "rectangle", x: 726, y: 294, width: 122, height: 36, strokeColor: "transparent", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: ["group-nav-system"], customData: { dockyardNodeId: "node-nav-system", role: "trigger", ...createDesignNodeData({ nodeId: "node-nav-system", nodeRole: "trigger", label: "系统管理菜单" }) } },
   { id: "nav-system-text", type: "text", x: 739, y: 302, text: "系统管理", fontSize: 17, groupIds: ["group-nav-system"] },
   { id: "patient-list-title", type: "text", x: 188, y: 370, text: "患者列表", fontSize: 18 },
-  { id: "node-search-slot", type: "rectangle", x: 188, y: 414, width: 154, height: 46, strokeColor: "#343a40", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: ["group-search-slot"], customData: { dockyardNodeId: "node-search-slot", role: "component-slot" } },
+  { id: "node-search-slot", type: "rectangle", x: 188, y: 414, width: 154, height: 46, strokeColor: "#343a40", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: ["group-search-slot"], customData: { dockyardNodeId: "node-search-slot", role: "component-slot", ...createDesignNodeData({ nodeId: "node-search-slot", nodeRole: "component-slot", label: "患者搜索区域" }) } },
   { id: "search-text", type: "text", x: 204, y: 427, text: "搜索患者", fontSize: 15, strokeColor: "#69707c", groupIds: ["group-search-slot"] },
   ...[0, 1, 2, 3].flatMap((index) => [
     { id: `patient-box-${index}`, type: "rectangle", x: 190, y: 495 + index * 54, width: 22, height: 22, roughness: 0 },
@@ -78,7 +87,7 @@ const baseSkeleton: any[] = [
   { id: "detail-body", type: "rectangle", x: 405, y: 414, width: 480, height: 280, roughness: 0 },
   { id: "detail-title", type: "text", x: 548, y: 525, text: "当前回访工作区", fontSize: 25 },
   { id: "detail-note", type: "text", x: 568, y: 568, text: "页面主体保持不变", fontSize: 15, strokeColor: "#69707c" },
-  { id: "node-system-screen", type: "rectangle", x: 965, y: 90, width: 300, height: 160, strokeColor: "#343a40", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: ["group-system-screen"], customData: { dockyardNodeId: "node-system-screen", role: "screen" } },
+  { id: "node-system-screen", type: "rectangle", x: 965, y: 90, width: 300, height: 160, strokeColor: "#343a40", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: ["group-system-screen"], customData: { dockyardNodeId: "node-system-screen", role: "screen", ...createDesignNodeData({ nodeId: "node-system-screen", nodeRole: "screen", label: "系统管理页面" }) } },
   { id: "system-title", type: "text", x: 1054, y: 142, text: "系统管理", fontSize: 23, groupIds: ["group-system-screen"] },
   { id: "system-note", type: "text", x: 1025, y: 188, text: "权限 / 配置 / 日志", fontSize: 16, strokeColor: "#69707c", groupIds: ["group-system-screen"] },
 ];
@@ -156,7 +165,7 @@ function generatedSlotSkeleton(slots: GeneratedSlot[]) {
     text: slot.label,
     fontSize: slot.fontSize,
     strokeColor: "#4b43dc",
-    customData: { dockyardNodeId: slot.id, role: "component-slot", label: slot.label },
+    customData: { dockyardNodeId: slot.id, role: "component-slot", ...createDesignNodeData({ nodeId: slot.id, nodeRole: "component-slot", label: slot.label }) },
   }));
 }
 
@@ -170,7 +179,7 @@ function relationSkeleton(interactions: Interaction[], bindings: ComponentBindin
       start: { id: item.sourceNodeId, type: "rectangle" }, end: { id: item.targetNodeId, type: "rectangle" },
       ...(item.status === "confirmed" ? { label: { text: item.label, fontSize: 14 } } : {}),
       strokeColor: "#343a40", roughness: 0, endArrowhead: "arrow", locked: true,
-      customData: { dockyardRelationId: item.id, relationType: "interaction", status: item.status },
+      customData: { dockyardRelationId: item.id, relationType: "interaction", status: item.status, ...createInteractionData({ relationId: item.id, sourceElementId: item.sourceNodeId, targetElementId: item.targetNodeId, event: item.event, action: item.action }) },
     };
   });
   const componentElements = bindings.flatMap((item) => {
@@ -188,12 +197,12 @@ function relationSkeleton(interactions: Interaction[], bindings: ComponentBindin
     const contentX = cardGeometry.x + CARD_LAYOUT.contentInset * scaleX;
     const connectorGeometry = boundArrowGeometry(geometryById[item.targetNodeId], cardGeometry);
     return [
-      { id: item.cardNodeId, type: "rectangle", ...cardGeometry, strokeColor: item.status === "confirmed" ? "#198038" : "#635bff", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: [`group-${item.id}`], customData: { dockyardNodeId: item.cardNodeId, role: "component-reference", componentRefId: item.componentRefId, status: item.status } },
+      { id: item.cardNodeId, type: "rectangle", ...cardGeometry, strokeColor: item.status === "confirmed" ? "#198038" : "#635bff", backgroundColor: "#ffffff", fillStyle: "solid", roughness: 0, groupIds: [`group-${item.id}`], customData: { dockyardNodeId: item.cardNodeId, role: "component-reference", componentRefId: item.componentRefId, status: item.status, ...createComponentCardData({ bindingId: item.id, previewElementId: item.previewNodeId }) } },
       { id: `${item.id}-badge`, type: "rectangle", x: contentX, y: y + 18 * scaleY, width: 45 * scaleX, height: 26 * scaleY, strokeColor: "#635bff", backgroundColor: "#e9e7ff", fillStyle: "solid", roughness: 0, groupIds: [`group-${item.id}`] },
       { id: `${item.id}-badge-text`, type: "text", x: contentX + 12 * scaleX, y: y + 23 * scaleY, text: item.id, fontSize: 14 * textScale, strokeColor: "#4b43dc", groupIds: [`group-${item.id}`] },
       { id: `${item.id}-library`, type: "text", x: contentX + 59 * scaleX, y: y + 22 * scaleY, text: `${component.library} · ${component.component} · ${component.variant}`, fontSize: 14 * textScale, groupIds: [`group-${item.id}`] },
-      { id: item.previewNodeId, type: "rectangle", x: contentX, y: y + CARD_LAYOUT.previewTop * scaleY, width: CARD_LAYOUT.previewWidth * scaleX, height: CARD_LAYOUT.previewHeight * scaleY, strokeColor: "#9aa1ad", backgroundColor: "#f8f9fa", fillStyle: "solid", roughness: 0, groupIds: [`group-${item.id}`], customData: { role: "component-preview", bindingId: item.id } },
-      { id: item.connectorElementId, type: "arrow", ...connectorGeometry, start: { id: item.targetNodeId, type: elementTypeFor(item.targetNodeId) }, end: { id: item.cardNodeId, type: "rectangle" }, strokeColor: "#635bff", strokeStyle: "dashed", roughness: 0, startArrowhead: null, endArrowhead: "arrow", locked: true, customData: { dockyardRelationId: item.id, relationType: "component" } },
+      { id: item.previewNodeId, type: "rectangle", x: contentX, y: y + CARD_LAYOUT.previewTop * scaleY, width: CARD_LAYOUT.previewWidth * scaleX, height: CARD_LAYOUT.previewHeight * scaleY, strokeColor: "#9aa1ad", backgroundColor: "#f8f9fa", fillStyle: "solid", roughness: 0, groupIds: [`group-${item.id}`], customData: { role: "component-preview", bindingId: item.id, ...createComponentPreviewData({ bindingId: item.id, cardElementId: item.cardNodeId }) } },
+      { id: item.connectorElementId, type: "arrow", ...connectorGeometry, start: { id: item.targetNodeId, type: elementTypeFor(item.targetNodeId) }, end: { id: item.cardNodeId, type: "rectangle" }, strokeColor: "#635bff", strokeStyle: "dashed", roughness: 0, startArrowhead: null, endArrowhead: "arrow", locked: true, customData: { dockyardRelationId: item.id, relationType: "component", ...createComponentBindingData({ bindingId: item.id, targetElementId: item.targetNodeId, cardElementId: item.cardNodeId, previewElementId: item.previewNodeId, sourceId: item.sourceId, componentKey: item.componentRefId }) } },
     ];
   });
   return [...interactionElements, ...componentElements];
@@ -697,7 +706,7 @@ function App() {
 
   const confirmedInteractions = interactions.filter((item) => item.status === "confirmed");
   const confirmedBindings = bindings.filter((item) => item.status === "confirmed");
-  const exportData = useMemo(() => ({ version: 1, designNodes: [...Object.entries(nodeInfo).map(([id, info]) => ({ id, ...info })), ...generatedSlots.map((slot) => ({ id: slot.id, label: slot.label, role: "component-slot", x: slot.x, y: slot.y, width: slot.width, height: slot.height }))], interactions: confirmedInteractions, componentBindings: confirmedBindings, componentRefs: Object.fromEntries(confirmedBindings.map((item) => [item.componentRefId, componentCatalog[item.componentRefId as keyof typeof componentCatalog]])) }), [confirmedBindings, confirmedInteractions, generatedSlots]);
+  const exportData = useMemo(() => ({ dockyard: createSceneMetadata(), version: 1, designNodes: [...Object.entries(nodeInfo).map(([id, info]) => ({ id, ...info })), ...generatedSlots.map((slot) => ({ id: slot.id, label: slot.label, role: "component-slot", x: slot.x, y: slot.y, width: slot.width, height: slot.height }))], interactions: confirmedInteractions, componentBindings: confirmedBindings, componentRefs: Object.fromEntries(confirmedBindings.map((item) => [item.componentRefId, componentCatalog[item.componentRefId as keyof typeof componentCatalog]])) }), [confirmedBindings, confirmedInteractions, generatedSlots]);
   const count = confirmedInteractions.length + confirmedBindings.length;
 
   useEffect(() => {

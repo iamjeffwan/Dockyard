@@ -224,7 +224,7 @@ function importArtwork(
       try {
         const parsed = JSON.parse(text) as Partial<SceneData>;
         if (parsed.type !== "excalidraw" || parsed.version !== 2 || !Array.isArray(parsed.elements)) throw new Error("不是有效的 Excalidraw v2 图稿");
-        const scene: SceneData = { type: "excalidraw", version: 2, source: String(parsed.source || "imported-native"), elements: parsed.elements, appState: parsed.appState || { viewBackgroundColor: "#ffffff" }, files: parsed.files || {} };
+        const scene: SceneData = { type: "excalidraw", version: 2, source: String(parsed.source || "imported-native"), elements: parsed.elements, dockyard: parsed.dockyard?.schemaVersion === 1 ? { schemaVersion: 1 } : undefined, appState: parsed.appState || { viewBackgroundColor: "#ffffff" }, files: parsed.files || {} };
         const item: Artwork = { id: uid("artwork"), name: artworkName(workspace.artworks, file.name), status: "draft", createdAt: now(), updatedAt: now(), source: null, scene, annotations: [], components: [], notes: "" };
         update((current) => ({ ...current, currentArtworkId: item.id, artworks: [...current.artworks, item] }));
         if (openAfterImport) openPanel("annotator");

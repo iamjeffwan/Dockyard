@@ -147,6 +147,11 @@ try {
   const targetsUrl = `http://127.0.0.1:${debugPort}/json/list`;
   target = await waitFor(async () => (await (await fetch(targetsUrl)).json()).find((item) => item.type === "page"), "等待原型页面超时");
   await waitFor(() => evaluate(target, "Boolean(window.__dockyardRelationPrototype?.getSceneElements)"), "原型页面没有完成初始化");
+  assert.deepEqual(
+    await evaluate(target, "window.__dockyardRelationPrototype.exportData.dockyard"),
+    { schemaVersion: 1 },
+    "原型关系数据缺少 Dockyard 场景版本",
+  );
 
   await evaluate(target, `document.querySelector('input[aria-label="添加交互关系"]')?.click(); true`);
   const sourcePoint = await scenePoint(target, "node-nav-system");
@@ -160,6 +165,22 @@ try {
   await evaluate(target, `document.querySelector('[aria-label="设置交互方式"]')?.click(); true`);
   await evaluate(target, "[...document.querySelectorAll('.interaction-options button')].find((button) => button.textContent.includes('点击 · 跳转'))?.click(); true");
   assert.equal((await evaluate(target, "window.__dockyardRelationPrototype.exportData.interactions.length")), 1, "交互关系没有确认");
+  const interactionData = await evaluate(target, "window.__dockyardRelationPrototype.getSceneElements().find((item) => item.id === 'interaction-arrow-I1')?.customData");
+  assert.deepEqual(
+    {
+      dockyardRole: interactionData?.dockyardRole,
+      relationId: interactionData?.relationId,
+      sourceElementId: interactionData?.sourceElementId,
+      targetElementId: interactionData?.targetElementId,
+    },
+    {
+      dockyardRole: "interaction",
+      relationId: "I1",
+      sourceElementId: "node-nav-system",
+      targetElementId: "node-system-screen",
+    },
+    "交互箭头没有写入专用关系标记",
+  );
   await screenshot(target, "interaction-confirmed");
 
   await waitFor(() => evaluate(target, `Boolean(document.querySelector('[aria-label="修改I1交互方式"]'))`), "已确认交互没有显示修改入口");
@@ -220,6 +241,45 @@ try {
     cardBoundElements: layout.card?.boundElements,
   })}\n`);
   assert.ok(layout.card && layout.preview && layout.header && layout.connector, "卡片或关联线元素不完整");
+  assert.deepEqual(
+    {
+      role: layout.connector?.customData?.dockyardRole,
+      bindingId: layout.connector?.customData?.bindingId,
+      targetElementId: layout.connector?.customData?.targetElementId,
+      cardElementId: layout.connector?.customData?.cardElementId,
+      previewElementId: layout.connector?.customData?.previewElementId,
+      sourceId: layout.connector?.customData?.sourceId,
+      componentKey: layout.connector?.customData?.componentKey,
+    },
+    {
+      role: "component-binding",
+      bindingId: "C1",
+      targetElementId: layout.generatedTarget?.id || "generated-slot-1",
+      cardElementId: "component-card-C1",
+      previewElementId: "component-preview-C1",
+      sourceId: "carbon-react",
+      componentKey: "carbon-button",
+    },
+    "组件关联箭头缺少完整的组件身份标记",
+  );
+  assert.deepEqual(
+    {
+      role: layout.card?.customData?.dockyardRole,
+      bindingId: layout.card?.customData?.bindingId,
+      previewElementId: layout.card?.customData?.previewElementId,
+    },
+    { role: "component-card", bindingId: "C1", previewElementId: "component-preview-C1" },
+    "组件卡片没有引用预览元素",
+  );
+  assert.deepEqual(
+    {
+      role: layout.preview?.customData?.dockyardRole,
+      bindingId: layout.preview?.customData?.bindingId,
+      cardElementId: layout.preview?.customData?.cardElementId,
+    },
+    { role: "component-preview", bindingId: "C1", cardElementId: "component-card-C1" },
+    "组件预览没有反向引用组件卡片",
+  );
   assert.equal(layout.header.text, "Carbon · Button · primary", "卡片顶部没有显示来源、组件种类和变体");
   assert.ok(layout.header.x + layout.header.width <= layout.card.x + layout.card.width, "卡片顶部组件信息超出右边界");
   assert.equal(layout.card.height, 184, "移除重复状态与底部名称后卡片高度没有缩小");
