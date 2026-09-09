@@ -50,7 +50,7 @@ import { nativeExcalidrawToolForShortcut } from "./excalidraw/component-tool-sho
 import { createDeliveryModule } from "./delivery/module";
 import { ExportImageDialog, type ExportImageOptions } from "./delivery/ExportImageDialog";
 import { useWorkspace } from "./workspace/useWorkspace";
-import { serializeScene } from "./design-intent/export.js";
+import { createDesignIntentSummary, serializeScene } from "./design-intent/export.js";
 import { importScene } from "./design-intent/import.js";
 import { staticSourceById } from "./static-components/registry.js";
 import {
@@ -611,6 +611,14 @@ function AnnotatorView() {
     link.download = `${artwork.name}${kind === "enhanced" ? ".dockyard" : ""}.excalidraw`;
     link.click();
     URL.revokeObjectURL(link.href);
+    if (kind === "enhanced") {
+      const summary = new Blob([JSON.stringify(createDesignIntentSummary(artwork.scene), null, 2)], { type: "application/json;charset=utf-8" });
+      const summaryLink = document.createElement("a");
+      summaryLink.href = URL.createObjectURL(summary);
+      summaryLink.download = `${artwork.name}.design-intent.json`;
+      summaryLink.click();
+      URL.revokeObjectURL(summaryLink.href);
+    }
     setStatus(kind === "enhanced" ? "增强版画稿已导出" : "普通版画稿已导出");
   };
   const removeComponent = (instanceId: string) => {

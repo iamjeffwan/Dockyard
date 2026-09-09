@@ -11,7 +11,7 @@ import {
   createSceneMetadata,
   readDockyardRole,
 } from "../.tmp/design-intent-contract/contract.js";
-import { createEnhancedScene, createNativeScene, serializeScene } from "../.tmp/design-intent-contract/design-intent/export.js";
+import { createEnhancedScene, createNativeScene, serializeScene, createDesignIntentSummary } from "../.tmp/design-intent-contract/design-intent/export.js";
 import { importScene } from "../.tmp/design-intent-contract/design-intent/import.js";
 
 test("设计关系使用专用标记，普通元素不被误认", () => {
@@ -87,4 +87,16 @@ test("导入增强画稿校验组件关联引用并保留版本", () => {
   assert.equal(result.isEnhanced, true);
   assert.deepEqual(result.invalidReferences, ["missing"]);
   assert.deepEqual(result.scene.dockyard, { schemaVersion: 1 });
+});
+
+test("从增强画稿生成模型可读的设计意图摘要", () => {
+  const summary = createDesignIntentSummary({ type: "excalidraw", version: 2, source: "test", elements: [
+    { id: "node", customData: { dockyardRole: "design-node", nodeId: "date", nodeRole: "component-slot", label: "就诊日期" } },
+    { id: "arrow", customData: { dockyardRole: "interaction", relationId: "I1" } },
+    { id: "binding", customData: { dockyardRole: "component-binding", bindingId: "C1", componentKey: "carbon-date-picker" } },
+  ] });
+  assert.equal(summary.schemaVersion, 1);
+  assert.equal(summary.nodes[0].elementId, "node");
+  assert.equal(summary.interactions[0].relationId, "I1");
+  assert.equal(summary.componentBindings[0].componentKey, "carbon-date-picker");
 });

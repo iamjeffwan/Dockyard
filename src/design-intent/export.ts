@@ -17,3 +17,10 @@ export function createNativeScene(scene: SceneData): SceneData {
 export function serializeScene(scene: SceneData, kind: "enhanced" | "native") {
   return JSON.stringify(kind === "enhanced" ? createEnhancedScene(scene) : createNativeScene(scene), null, 2);
 }
+
+export function createDesignIntentSummary(scene: SceneData) {
+  const nodes = scene.elements.filter((element) => element?.customData?.dockyardRole === "design-node").map((element) => ({ elementId: element.id, ...element.customData }));
+  const interactions = scene.elements.filter((element) => element?.customData?.dockyardRole === "interaction").map((element) => ({ elementId: element.id, ...element.customData }));
+  const componentBindings = scene.elements.filter((element) => element?.customData?.dockyardRole === "component-binding").map((element) => ({ elementId: element.id, ...element.customData }));
+  return { format: "dockyard-design-intent", schemaVersion: 1, nodes, interactions, componentBindings };
+}
