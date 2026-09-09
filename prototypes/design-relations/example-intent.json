@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "designNodes": [
+    { "id": "node-main-screen", "label": "患者信息管理主页面", "role": "screen" },
+    { "id": "node-nav-followup", "label": "回访菜单", "role": "trigger" },
+    { "id": "node-nav-system", "label": "系统管理菜单", "role": "trigger" },
+    { "id": "node-search-slot", "label": "患者搜索区域", "role": "component-slot" },
+    { "id": "node-system-screen", "label": "系统管理页面", "role": "screen" }
+  ],
+  "interactions": [
+    {
+      "id": "I1",
+      "sourceNodeId": "node-nav-system",
+      "targetNodeId": "node-system-screen",
+      "event": "click",
+      "action": "navigate",
+      "arrowElementId": "interaction-arrow-I1",
+      "label": "点击 · 跳转"
+    }
+  ],
+  "componentBindings": [
+    {
+      "id": "C1",
+      "targetNodeId": "node-search-slot",
+      "componentRefId": "carbon-dropdown",
+      "sourceId": "carbon-react",
+      "componentName": "Dropdown",
+      "connectorElementId": "component-link-C1",
+      "cardNodeId": "component-card-C1",
+      "previewNodeId": "component-preview-C1",
+      "status": "confirmed",
+      "usageIntent": "在该位置使用所选组件",
+      "customization": "开发时根据布局适配，不进行非等比缩放"
+    }
+  ],
+  "componentRefs": {
+    "carbon-dropdown": {
+      "library": "Carbon",
+      "component": "Dropdown",
+      "variant": "default",
+      "summary": "下拉选择"
+    }
+  }
+}

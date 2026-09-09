@@ -1,0 +1,35 @@
+html, body, #root, .prototype-shell { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+button, input, select { font: inherit; }
+.prototype-shell { position: relative; color: #20242a; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
+.relation-toolbar-tools { display: flex; align-items: center; gap: 2px; }
+.relation-popover { position: absolute; z-index: 20; top: 78px; right: 18px; width: 310px; padding: 13px; border: 1px solid #d9dde3; border-radius: 12px; background: #fff; box-shadow: 0 8px 28px #10182824; }
+.popover-head { display: flex; align-items: center; justify-content: space-between; }
+.popover-head { margin-bottom: 10px; }
+.popover-head button { display: grid; place-items: center; border: 0; border-radius: 6px; padding: 4px; background: transparent; cursor: pointer; }
+.relation-popover p { margin: 7px 0 0; color: #69707c; font-size: 12px; line-height: 1.45; }
+.interaction-add { position: absolute; z-index: 18; display: grid; width: 24px; height: 24px; place-items: center; border: 1.5px solid #343a40; border-radius: 50%; padding: 0; color: #20242a; background: #fff; box-shadow: 0 2px 8px #1018282b; cursor: pointer; transform: translate(-50%, -50%); }
+.interaction-add:hover { color: #fff; background: #635bff; }
+.interaction-edit { position: absolute; z-index: 18; border: 0; border-bottom: 1px dashed #69707c; padding: 1px 3px; color: #343a40; background: #fff; cursor: pointer; font-size: 12px; transform: translate(-50%, -50%); }
+.interaction-edit:hover { color: #4b43dc; border-color: #4b43dc; }
+.interaction-options { position: absolute; z-index: 24; display: grid; width: 158px; overflow: hidden; border: 1px solid #d9dde3; border-radius: 10px; padding: 6px; background: #fff; box-shadow: 0 8px 24px #1018282b; }
+.interaction-options strong { padding: 7px 8px; color: #69707c; font-size: 11px; }
+.interaction-options button { border: 0; border-radius: 6px; padding: 8px; background: transparent; cursor: pointer; text-align: left; font-size: 12px; }
+.interaction-options button:hover { background: #f2f1ff; }
+.preview-interaction-ring { position: absolute; z-index: 16; box-sizing: border-box; border: 2px solid #0f62fe; border-radius: 3px; pointer-events: none; box-shadow: 0 0 0 3px #0f62fe26; }
+
+.relation-status { position: absolute; z-index: 15; left: 50%; bottom: 22px; display: flex; align-items: center; gap: 8px; transform: translateX(-50%); border-radius: 999px; padding: 7px 8px 7px 10px; color: #fff; background: #20242a; box-shadow: 0 7px 24px #10182833; font-size: 12px; }
+.relation-status button { border: 0; border-radius: 999px; padding: 7px 11px; color: #20242a; background: #fff; cursor: pointer; font-weight: 650; }
+.relation-status .preview-toggle { color: #fff; background: transparent; }
+.relation-status .preview-toggle:hover { background: #343a40; }
+.relation-status kbd { margin-left: 5px; border: 1px solid #69707c; border-radius: 4px; padding: 1px 4px; color: #dfe2e7; background: #343a40; font: 10px/1.2 sans-serif; }
+.relation-status .preview-exit { color: #fff; background: #343a40; }
+.summary-remove { position: absolute; top: 7px; right: 7px; padding: 4px 7px !important; color: #da1e28 !important; background: #fff1f1 !important; font-size: 11px; }
+.relation-summary { position: absolute; z-index: 30; right: 18px; bottom: 76px; width: 330px; max-height: 440px; overflow: auto; border: 1px solid #d9dde3; border-radius: 12px; padding: 13px; color: #20242a; background: #fff; box-shadow: 0 9px 30px #10182826; }
+.summary-item { position: relative; margin: 7px 0; border: 1px solid #dfe2e7; border-left: 3px solid #343a40; border-radius: 8px; padding: 9px 56px 9px 9px; }
+.summary-item.component { border-left-color: #635bff; }
+.summary-item b, .summary-item span { display: block; }
+.summary-item b { margin-bottom: 4px; font-size: 12px; }
+.summary-item span { color: #69707c; font-size: 11px; }
+.copy { width: 100%; margin-top: 8px; border: 0; border-radius: 8px; padding: 9px; color: #fff; background: #20242a; cursor: pointer; }
+.empty { color: #7b828d; text-align: center; font-size: 12px; }
+.excalidraw .App-menu_top .buttonList { padding-right: 0; }

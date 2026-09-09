@@ -34,9 +34,11 @@ export async function loadStaticComponentModule(baseUrl = '.', selection = {}) {
     document.querySelectorAll('link[data-static-module]').forEach((link) => link.remove());
     const styles = failure === 'style' ? ['./dist/missing-styles.css'] : manifest.styles;
     for (const href of styles) {
+      const resourceUrl = new URL(href, moduleBase);
+      if (selection.cacheKey) resourceUrl.searchParams.set('v', selection.cacheKey);
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = new URL(href, moduleBase).href;
+      link.href = resourceUrl.href;
       link.dataset.staticModule = manifest.name;
       document.head.append(link);
       await new Promise((resolve, reject) => {
@@ -46,7 +48,9 @@ export async function loadStaticComponentModule(baseUrl = '.', selection = {}) {
     }
     phase = 'module';
     const entry = failure === 'module' ? './dist/missing-module.js' : manifest.entry;
-    await import(new URL(entry, moduleBase).href);
+    const entryUrl = new URL(entry, moduleBase);
+    if (selection.cacheKey) entryUrl.searchParams.set('v', selection.cacheKey);
+    await import(entryUrl.href);
     send('module-ready', { module: manifest.name, moduleVersion: manifest.version, componentKey: selection.componentKey, variantKey: selection.variantKey, defaults: manifest.defaults });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

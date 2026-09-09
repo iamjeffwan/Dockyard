@@ -159,6 +159,16 @@ export type ComponentInstance = Candidate & {
   intrinsicHeight?: number;
   naturalWidth?: number;
   naturalHeight?: number;
+  sizeMode?: "auto" | "manual";
+  presentation?: {
+    kind: "reference-card";
+    viewportX: number;
+    viewportY: number;
+    viewportWidth: number;
+    viewportHeight: number;
+    contentInset?: number;
+    fit: "contain";
+  };
   frameViewportWidth?: number;
   frameViewportHeight?: number;
   contentOffsetX?: number;

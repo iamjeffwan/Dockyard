@@ -62,6 +62,7 @@ select:focus-visible {
 }
 .bar-shell button,
 .bar-shell input,
+.bar-shell select,
 .bar-shell label {
   -webkit-app-region: no-drag;
 }

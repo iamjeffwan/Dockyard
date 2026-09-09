@@ -2,7 +2,7 @@
   "schemaVersion": "1",
   "sourceId": "carbon-react",
   "name": "carbon-static-module",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "protocolVersion": "1",
   "trustLevel": "bundled",
   "entry": "./dist/carbon-static-module.js",

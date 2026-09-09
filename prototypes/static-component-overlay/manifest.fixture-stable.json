@@ -2,7 +2,7 @@
   "schemaVersion": "1",
   "sourceId": "fixture-stable",
   "name": "fixture-stable-module",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "protocolVersion": "1",
   "trustLevel": "test",
   "entry": "./dist/carbon-static-module.js",

@@ -217,7 +217,22 @@ function importArtwork(
   ) => void,
   openAfterImport = false,
 ) {
-  if (!file?.type.startsWith("image/")) return;
+  if (!file) return;
+  const isNative = file.name.toLowerCase().endsWith(".excalidraw") || file.type === "application/json";
+  if (isNative) {
+    void file.text().then((text) => {
+      try {
+        const parsed = JSON.parse(text) as Partial<SceneData>;
+        if (parsed.type !== "excalidraw" || parsed.version !== 2 || !Array.isArray(parsed.elements)) throw new Error("不是有效的 Excalidraw v2 图稿");
+        const scene: SceneData = { type: "excalidraw", version: 2, source: String(parsed.source || "imported-native"), elements: parsed.elements, appState: parsed.appState || { viewBackgroundColor: "#ffffff" }, files: parsed.files || {} };
+        const item: Artwork = { id: uid("artwork"), name: artworkName(workspace.artworks, file.name), status: "draft", createdAt: now(), updatedAt: now(), source: null, scene, annotations: [], components: [], notes: "" };
+        update((current) => ({ ...current, currentArtworkId: item.id, artworks: [...current.artworks, item] }));
+        if (openAfterImport) openPanel("annotator");
+      } catch (error) { window.alert(error instanceof Error ? error.message : "原生图稿无法导入"); }
+    });
+    return;
+  }
+  if (!file.type.startsWith("image/")) return;
   void readImage(file).then((source) => {
     const baseId = uid("base");
     const item = createArtwork(
@@ -727,6 +742,7 @@ function AnnotatorView() {
       y: centerY - definition.defaultHeight / 2,
       width: definition.defaultWidth,
       height: definition.defaultHeight,
+      sizeMode: "auto",
       rotation: 0,
     };
     updateArtwork((current) => ({ ...current, components: [...current.components, instance], updatedAt: now() }));
@@ -770,7 +786,7 @@ function AnnotatorView() {
           ref={importInputRef}
           className="canvas-import-input"
           type="file"
-          accept="image/*"
+          accept="image/*,.excalidraw,application/json"
           tabIndex={-1}
           onChange={(event) => {
             importArtwork(event.target.files?.[0], workspace, update);

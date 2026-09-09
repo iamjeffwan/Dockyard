@@ -29,6 +29,10 @@ const electronBin = join(
   "dist",
   process.platform === "win32" ? "electron.exe" : "electron",
 );
+const staticModuleVersion = JSON.parse(readFileSync(
+  join(projectRoot, "public", "static-component-overlay", "manifest.json"),
+  "utf8",
+)).version;
 const delay = (milliseconds) =>
   new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 
@@ -494,7 +498,7 @@ try {
         sourceId: "carbon-react",
         componentKey: "carbon-button",
         protocolVersion: "1",
-        version: "0.1.0",
+        version: staticModuleVersion,
       },
     }, "工作区没有按来源标识保存静态实例契约");
     await frameEvaluate(annotator, `(() => {
@@ -583,6 +587,13 @@ try {
   });
 
   const finalGeometry = await runStage("验证移动、旋转和旋转后缩放", async () => {
+    const readTextStyle = () => frameEvaluate(annotator, `(() => {
+      const content = document.querySelector('[data-component-id="${componentId}"] .component-natural-content');
+      const button = content.querySelector('.cds--btn');
+      const matrix = new DOMMatrix(getComputedStyle(content.parentElement).transform);
+      return { fontSize: getComputedStyle(button).fontSize, x: matrix.a, y: matrix.d };
+    })()`);
+    const originalText = await readTextStyle();
     const initial = await geometry(annotator, componentId);
     await pointerGesture(annotator, componentId, ".component-sequence", 42, 28);
     const moved = await geometry(annotator, componentId);
@@ -596,6 +607,7 @@ try {
     const resized = await geometry(annotator, componentId);
     assert.ok(Math.abs(resized.width - rotated.width - 36) < 0.01, `旋转后视觉宽度拖动结果错误：${rotated.width} → ${resized.width}`);
     assert.ok(Math.abs(resized.height - rotated.height - 22) < 0.01, `旋转后视觉高度拖动结果错误：${rotated.height} → ${resized.height}`);
+    assert.deepEqual(await readTextStyle(), { ...originalText, x: 1, y: 1 }, "调整容器尺寸改变了文字大小或比例");
     await captureEvidence(annotator, "rotated-resize");
     return resized;
   });
@@ -664,6 +676,52 @@ try {
     assert.ok(hostMessages.filter((message) => message.type === "set-instances").every((message) => message.instances.every((instance) => typeof instance.id === "string" && instance.id)), "实例同步命令缺少实例标识");
   });
 
+  await runStage("新组件采用真实布局且不拉伸内容", async () => {
+    const metrics = await frameEvaluate(annotator, `(() => [...document.querySelectorAll('[data-component-key]')]
+      .filter(node => node.dataset.componentKey !== 'carbon-button')
+      .map(node => {
+        const layout = node.querySelector('.component-content-layout, .component-content-scaler');
+        const content = node.querySelector('.component-natural-content');
+        const transform = new DOMMatrix(getComputedStyle(layout).transform);
+        return { key: node.dataset.componentKey, width: node.offsetWidth, height: node.offsetHeight,
+          naturalWidth: content.offsetWidth, naturalHeight: content.offsetHeight, scaleX: transform.a, scaleY: transform.d };
+      }))()`);
+    process.stdout.write(JSON.stringify(metrics) + "\n");
+    for (const item of metrics) {
+      assert.equal(item.scaleX, 1, `${item.key} 横向拉伸了内容`);
+      assert.equal(item.scaleY, 1, `${item.key} 纵向拉伸了内容`);
+      assert.equal(item.width, item.naturalWidth, `${item.key} 未采用实际布局宽度`);
+      assert.equal(item.height, item.naturalHeight, `${item.key} 未采用实际布局高度`);
+    }
+    assert.equal(metrics.find(item => item.key === 'carbon-dropdown').width, 300, "百分比宽度下拉框没有明确的初始布局宽度");
+    await captureEvidence(annotator, "natural-component-layout");
+  });
+
+  const resizedDropdown = await runStage("调整下拉框容器宽度但保持文字图标大小", async () => {
+    const dropdownId = await frameEvaluate(annotator, `document.querySelector('[data-component-key="carbon-dropdown"]').dataset.componentId`);
+    const readLayout = () => frameEvaluate(annotator, `(() => {
+      const surface = document.querySelector('[data-component-id="${dropdownId}"]');
+      const field = surface.querySelector('.cds--list-box__field');
+      const icon = field.querySelector('svg');
+      const matrix = new DOMMatrix(getComputedStyle(surface.querySelector('.component-content-layout, .component-content-scaler')).transform);
+      return { width: field.offsetWidth, font: getComputedStyle(field).fontSize,
+        iconWidth: icon.getBoundingClientRect().width, iconHeight: icon.getBoundingClientRect().height,
+        scaleX: matrix.a, scaleY: matrix.d };
+    })()`);
+    const before = await readLayout();
+    const initial = await geometry(annotator, dropdownId);
+    await clickPoint(annotator, await componentPoint(annotator, dropdownId, '.component-sequence'));
+    await pointerGesture(annotator, dropdownId, '.component-resize-handle', 180, 40);
+    const after = await readLayout();
+    assert.equal(after.width, before.width + 180, "容器变宽后下拉控件没有重新布局");
+    assert.deepEqual({ ...after, width: before.width }, { ...before, scaleX: 1, scaleY: 1 }, "调整容器改变了文字或图标大小");
+    const final = await geometry(annotator, dropdownId);
+    assert.equal(final.width, initial.width + 180);
+    assert.equal(final.height, initial.height + 40);
+    await captureEvidence(annotator, 'resized-dropdown-layout');
+    return { id: dropdownId, geometry: final };
+  });
+
   await runStage("补验五组件交互与工具快捷键", async () => {
     const result = await frameEvaluate(annotator, `(() => {
       const checkbox = document.querySelector('[data-component-key="carbon-checkbox"] input');
@@ -701,7 +759,7 @@ try {
         loadStatus: 'loading',
         sourceLibraryId: sourceId,
         componentKey,
-        staticModule: { sourceId, componentKey, protocolVersion: '1', version: '0.1.0' },
+        staticModule: { sourceId, componentKey, protocolVersion: '1', version: ${JSON.stringify(staticModuleVersion)} },
         x,
         y,
         width: componentKey === 'carbon-dropdown' ? 300 : 160,
@@ -740,6 +798,7 @@ try {
       { id: "fixture-stable-button", sourceId: "fixture-stable" },
       { id: "fixture-stable-dropdown", sourceId: "fixture-stable" },
     ]);
+
 
     for (const sourceId of ["fixture-stable", "fixture-recovering"]) {
       const isolated = await frameEvaluate(annotator, `(() => {
@@ -835,7 +894,7 @@ try {
         id: 'missing-component', name: 'missing-component', library: 'fixture-stable', previewKind: 'reference',
         instanceId: 'fixture-unknown', elementId: '', sequence: 'fixture-unknown', status: 'confirmed', loadStatus: 'loading',
         sourceLibraryId: 'fixture-stable', componentKey: 'missing-component',
-        staticModule: { sourceId: 'fixture-stable', componentKey: 'missing-component', protocolVersion: '1', version: '0.1.0' },
+        staticModule: { sourceId: 'fixture-stable', componentKey: 'missing-component', protocolVersion: '1', version: ${JSON.stringify(staticModuleVersion)} },
         x: 520, y: 620, width: 190, height: 70, rotation: 0,
       });
       return window.dockyard.saveWorkspace(workspace);
@@ -934,6 +993,8 @@ try {
       finalGeometry,
       "重新打开后组件几何状态没有恢复",
     );
+    await waitFor(() => geometry(annotator, resizedDropdown.id), "重新打开后下拉框没有恢复");
+    assert.deepEqual(await geometry(annotator, resizedDropdown.id), resizedDropdown.geometry, "手动调整的容器被自然尺寸覆盖");
   });
 
   process.stdout.write("真实画板完整组件路径验收通过。\n");

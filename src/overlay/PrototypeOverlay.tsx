@@ -26,6 +26,9 @@ type RuntimeInstance = {
   height?: number;
   naturalWidth?: number;
   naturalHeight?: number;
+  sizeMode?: "auto" | "manual";
+  presentation?: ComponentInstance["presentation"];
+  interactive?: boolean;
   rotation: number;
   sequence?: string;
 };
@@ -43,16 +46,19 @@ export type PrototypeOverlayProps = {
   mode: OverlayMode;
   onCommit: (instanceId: string, patch: Partial<ComponentInstance>) => void;
   onNativeToolShortcut: (key: string) => void;
+  interactiveInstanceIds?: string[];
 };
 
 function runtimeUrl(source: StaticSourceDefinition) {
-  const url = window.dockyard ? "dockyard-static://components/runtime.html" : source.runtimeUrl;
-  const params = new URLSearchParams({ source: source.id });
+  const url = window.dockyard
+    ? "dockyard-static://components/runtime.html"
+    : new URL(source.runtimeUrl.replace(/^\.\//, "/"), window.location.origin).href;
+  const params = new URLSearchParams({ source: source.id, moduleVersion: source.module.version });
   if (source.testOnly) params.set("fixtures", "1");
   return `${url}${url.includes("?") ? "&" : "?"}${params}`;
 }
 
-function toRuntimeInstance(item: ComponentInstance, source: StaticSourceDefinition): RuntimeInstance {
+function toRuntimeInstance(item: ComponentInstance, source: StaticSourceDefinition, interactive: boolean): RuntimeInstance {
   return {
     id: item.instanceId,
     sourceId: source.id,
@@ -66,6 +72,9 @@ function toRuntimeInstance(item: ComponentInstance, source: StaticSourceDefiniti
     height: Number(item.height) || undefined,
     naturalWidth: Number(item.naturalWidth) || undefined,
     naturalHeight: Number(item.naturalHeight) || undefined,
+    sizeMode: item.sizeMode,
+    presentation: item.presentation,
+    interactive,
     rotation: Number(item.rotation) || 0,
     sequence: item.sequence,
   };
@@ -104,6 +113,7 @@ function SourceRuntimeLayer({
   onPointerPosition,
   onCommit,
   onNativeToolShortcut,
+  interactiveInstanceIds,
 }: {
   group: SourceGroup;
   viewport: ViewportChannel;
@@ -112,6 +122,7 @@ function SourceRuntimeLayer({
   onPointerPosition: (sourceId: string, x: number, y: number, interactive: boolean) => void;
   onCommit: PrototypeOverlayProps["onCommit"];
   onNativeToolShortcut: PrototypeOverlayProps["onNativeToolShortcut"];
+  interactiveInstanceIds?: string[];
 }) {
   const { source, components } = group;
   const [viewportState, setViewportState] = useState(() => viewport.getSnapshot());
@@ -120,7 +131,11 @@ function SourceRuntimeLayer({
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const onCommitRef = useRef(onCommit);
   const onNativeToolShortcutRef = useRef(onNativeToolShortcut);
-  const instances = useMemo(() => components.map((item) => toRuntimeInstance(item, source)), [components, source]);
+  const interactiveIdsKey = interactiveInstanceIds?.join("\0") || "";
+  const instances = useMemo(() => {
+    const interactiveIds = new Set(interactiveInstanceIds);
+    return components.map((item) => toRuntimeInstance(item, source, interactiveIds.has(item.instanceId)));
+  }, [components, interactiveIdsKey, source]);
   const frameSource = useMemo(() => runtimeUrl(source), [source]);
 
   const sendRuntimeState = useCallback(() => {
@@ -139,7 +154,17 @@ function SourceRuntimeLayer({
     onNativeToolShortcutRef.current = onNativeToolShortcut;
   }, [onNativeToolShortcut]);
 
-  useEffect(() => viewport.subscribe(() => setViewportState(viewport.getSnapshot())), [viewport]);
+  useEffect(() => {
+    let frame = 0;
+    return viewport.subscribe(() => {
+      const snapshot = viewport.getSnapshot();
+      frame = requestAnimationFrame(() => {
+        setViewportState(snapshot);
+        frame = 0;
+      });
+      frameRef.current?.contentWindow?.postMessage(runtimeCommand(source.id, RuntimeCommand.viewport, viewportPayload(snapshot)), "*");
+    });
+  }, [source.id, viewport]);
 
   useEffect(() => {
     frameRef.current?.contentWindow?.postMessage(runtimeCommand(source.id, RuntimeCommand.viewport, viewportPayload(viewportState)), "*");
@@ -204,25 +229,33 @@ function SourceRuntimeLayer({
         const naturalHeight = Number(event.data.naturalHeight ?? event.data.height);
         if (naturalWidth > 0 && naturalHeight > 0) {
           const current = components.find((item) => item.instanceId === instanceId);
-          onCommitRef.current(instanceId, {
+          const patch: Partial<ComponentInstance> = {
             naturalWidth,
             naturalHeight,
-            width: Number(current?.width) || naturalWidth,
-            height: Number(current?.height) || naturalHeight,
+            width: current?.sizeMode === "auto" ? naturalWidth : Number(current?.width) || naturalWidth,
+            height: current?.sizeMode === "auto" ? naturalHeight : Number(current?.height) || naturalHeight,
             boundsSource: "story-dom",
             loadStatus: "ready",
             staticError: undefined,
-          });
+          };
+          if (current?.sizeMode === "auto" && current.boundsSource !== "story-dom") {
+            patch.x = (Number(current.x) || 0) + ((Number(current.width) || naturalWidth) - naturalWidth) / 2;
+            patch.y = (Number(current.y) || 0) + ((Number(current.height) || naturalHeight) - naturalHeight) / 2;
+          }
+          if (Object.entries(patch).some(([key, value]) => current?.[key as keyof ComponentInstance] !== value)) {
+            onCommitRef.current(instanceId, patch);
+          }
         }
         return;
       }
       if (event.data.type !== RuntimeEvent.componentDrop) return;
-      const values = ["x", "y", "width", "height", "rotation"] as const;
+      const values = ["x", "y", "width", "height", "rotation", "naturalWidth", "naturalHeight"] as const;
       const patch: Partial<ComponentInstance> = {};
       for (const key of values) {
         const value = Number(event.data[key]);
         if (Number.isFinite(value)) patch[key] = value;
       }
+      if (event.data.transformKind === "resize") patch.sizeMode = "manual";
       onCommitRef.current(instanceId, patch);
     };
     window.addEventListener("message", receive);
@@ -235,18 +268,44 @@ function SourceRuntimeLayer({
     frameRef.current?.contentWindow?.postMessage(runtimeCommand(source.id, RuntimeCommand.retry), "*");
   };
 
+  const interactiveInstance = instances.find((item) => item.interactive);
+  const interactionClipRects = interactiveInstance?.presentation ? instances.flatMap((instance) => {
+    const p = instance.presentation;
+    if (!p) return [];
+    const overflow = instance.interactive ? 380 * viewportState.zoom : 0;
+    const rawLeft = (p.viewportX + viewportState.scrollX) * viewportState.zoom - overflow;
+    const rawTop = (p.viewportY + viewportState.scrollY) * viewportState.zoom - overflow;
+    const rawRight = (p.viewportX + p.viewportWidth + viewportState.scrollX) * viewportState.zoom + overflow;
+    const rawBottom = (p.viewportY + p.viewportHeight + viewportState.scrollY) * viewportState.zoom + overflow;
+    const left = Math.max(0, rawLeft);
+    const top = Math.max(0, rawTop);
+    const right = Math.min(viewportState.width, rawRight);
+    const bottom = Math.min(viewportState.height, rawBottom);
+    return right > left && bottom > top ? [{ id: instance.id, x: left, y: top, width: right - left, height: bottom - top }] : [];
+  }) : [];
+  const interactionClipId = `dockyard-runtime-clip-${source.id.replace(/[^a-z0-9_-]/gi, "-")}`;
+  const interactionClip = interactionClipRects.length ? `url(#${interactionClipId})` : undefined;
   return (
-    <div
-      className={`prototype-overlay-layer prototype-overlay-shared${active && mode === "component" ? " is-active" : ""}`}
-      data-source-id={source.id}
-      data-runtime-status={runtimeStatus}
-    >
+    <>
+      {interactionClipRects.length > 0 && <svg className="prototype-overlay-clip-definitions" aria-hidden="true">
+        <defs>
+          <clipPath id={interactionClipId} clipPathUnits="userSpaceOnUse">
+            {interactionClipRects.map((rect) => <rect key={rect.id} x={rect.x} y={rect.y} width={rect.width} height={rect.height} />)}
+          </clipPath>
+        </defs>
+      </svg>}
+      <div
+        className={`prototype-overlay-layer prototype-overlay-shared${(active && mode === "component") || Boolean(interactionClip) ? " is-active" : ""}`}
+        data-source-id={source.id}
+        data-runtime-status={runtimeStatus}
+        style={interactionClip ? { clipPath: interactionClip } : undefined}
+      >
       <iframe
         ref={frameRef}
         title={`静态组件层：${source.name}`}
         data-source-id={source.id}
         src={frameSource}
-        sandbox="allow-scripts"
+        sandbox={window.dockyard ? "allow-scripts" : undefined}
         onLoad={sendRuntimeState}
         style={{ width: "100%", height: "100%", border: 0, background: "transparent" }}
       />
@@ -264,11 +323,12 @@ function SourceRuntimeLayer({
           {sourceFailure && <button type="button" onClick={retry}>重试</button>}
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 }
 
-export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativeToolShortcut }: PrototypeOverlayProps) {
+export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativeToolShortcut, interactiveInstanceIds = [] }: PrototypeOverlayProps) {
   const groups = useMemo(() => {
     const grouped = new Map<string, SourceGroup>();
     for (const item of components) {
@@ -283,6 +343,7 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativ
     return [...grouped.values()];
   }, [components]);
   const [activeSourceId, setActiveSourceId] = useState("");
+  const [hoveredSourceId, setHoveredSourceId] = useState("");
   const viewportState = viewport.getSnapshot();
   const unknownComponents = components.filter((item) => {
     const sourceId = item.staticModule?.sourceId || item.sourceLibraryId;
@@ -304,16 +365,39 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativ
     }
   }, [onCommit, unknownComponents]);
 
+  useEffect(() => {
+    const onMove = (event: PointerEvent) => {
+      if (mode !== "canvas") { setHoveredSourceId(""); return; }
+      const snapshot = viewport.getSnapshot();
+      const x = event.clientX / snapshot.zoom - snapshot.scrollX;
+      const y = event.clientY / snapshot.zoom - snapshot.scrollY;
+      let hit = "";
+      for (const group of groups) for (const item of group.components) {
+        const p = item.presentation;
+        const width = p?.viewportWidth || Number(item.width) || Number(item.naturalWidth) || 1;
+        const height = p?.viewportHeight || Number(item.height) || Number(item.naturalHeight) || 1;
+        const ix = p?.viewportX ?? Number(item.x); const iy = p?.viewportY ?? Number(item.y);
+        if (x >= ix && x <= ix + width && y >= iy && y <= iy + height) hit = group.source.id;
+      }
+      setHoveredSourceId(hit);
+    };
+    window.addEventListener("pointermove", onMove, true);
+    return () => window.removeEventListener("pointermove", onMove, true);
+  }, [groups, mode, viewport]);
+
   const onPointerPosition = useCallback((sourceId: string, clientX: number, clientY: number, interactive: boolean) => {
     const snapshot = viewport.getSnapshot();
     const x = clientX / snapshot.zoom - snapshot.scrollX;
     const y = clientY / snapshot.zoom - snapshot.scrollY;
     for (const group of [...groups].reverse()) {
       for (const item of [...group.components].reverse()) {
-        const width = Number(item.width) || Number(item.naturalWidth) || 1;
-        const height = Number(item.height) || Number(item.naturalHeight) || 1;
-        const centerX = Number(item.x) + width / 2;
-        const centerY = Number(item.y) + height / 2;
+        const presentation = item.presentation;
+        const width = presentation?.viewportWidth || Number(item.width) || Number(item.naturalWidth) || 1;
+        const height = presentation?.viewportHeight || Number(item.height) || Number(item.naturalHeight) || 1;
+        const itemX = presentation?.viewportX ?? Number(item.x);
+        const itemY = presentation?.viewportY ?? Number(item.y);
+        const centerX = itemX + width / 2;
+        const centerY = itemY + height / 2;
         const angle = -(Number(item.rotation) || 0);
         const dx = x - centerX;
         const dy = y - centerY;
@@ -335,10 +419,11 @@ export function PrototypeOverlay({ components, viewport, mode, onCommit, onNativ
         group={group}
         viewport={viewport}
         mode={mode}
-        active={group.source.id === activeSourceId}
+        active={(mode === "component" && group.source.id === activeSourceId) || (mode === "canvas" && group.source.id === hoveredSourceId)}
         onPointerPosition={onPointerPosition}
         onCommit={onCommit}
         onNativeToolShortcut={onNativeToolShortcut}
+        interactiveInstanceIds={interactiveInstanceIds}
       />
     ))}
     {unknownComponents.map((item) => (
